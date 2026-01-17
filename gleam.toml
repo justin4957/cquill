@@ -4,7 +4,7 @@ target = "erlang"
 
 description = "A compile-time safe database library for Gleam"
 licences = ["Apache-2.0"]
-repository = { type = "github", user = "coolbeans", repo = "cquill" }
+repository = { type = "github", user = "justin4957", repo = "cquill" }
 links = [{ title = "Documentation", href = "https://hexdocs.pm/cquill" }]
 
 [dependencies]
