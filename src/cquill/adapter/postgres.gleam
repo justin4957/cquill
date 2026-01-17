@@ -47,6 +47,10 @@ pub type PostgresConfig {
     ssl: pog.Ssl,
     /// Number of connections in the pool (default: 10)
     pool_size: Int,
+    /// Default query timeout in milliseconds (default: 5000)
+    default_timeout: Int,
+    /// Interval in ms to ping idle connections (default: 1000)
+    idle_interval: Int,
   )
 }
 
@@ -61,6 +65,8 @@ pub fn default_config(pool_name: Name(pog.Message)) -> PostgresConfig {
     password: None,
     ssl: pog.SslDisabled,
     pool_size: 10,
+    default_timeout: 5000,
+    idle_interval: 1000,
   )
 }
 
@@ -81,6 +87,8 @@ pub fn config_from_url(
         password: pog_config.password,
         ssl: pog_config.ssl,
         pool_size: pog_config.pool_size,
+        default_timeout: 5000,
+        idle_interval: pog_config.idle_interval,
       ))
     Error(_) -> Error(Nil)
   }
@@ -124,6 +132,24 @@ pub fn pool_size(config: PostgresConfig, pool_size: Int) -> PostgresConfig {
   PostgresConfig(..config, pool_size: pool_size)
 }
 
+/// Set the default query timeout in milliseconds.
+/// Queries taking longer than this will be aborted with a Timeout error.
+/// Default is 5000ms (5 seconds).
+pub fn default_timeout(
+  config: PostgresConfig,
+  timeout_ms: Int,
+) -> PostgresConfig {
+  PostgresConfig(..config, default_timeout: timeout_ms)
+}
+
+/// Set the idle connection ping interval in milliseconds.
+/// The database is pinged every idle_interval when the connection is idle.
+/// This helps detect and recover from stale connections.
+/// Default is 1000ms (1 second).
+pub fn idle_interval(config: PostgresConfig, interval_ms: Int) -> PostgresConfig {
+  PostgresConfig(..config, idle_interval: interval_ms)
+}
+
 // ============================================================================
 // CONNECTION TYPES
 // ============================================================================
@@ -144,6 +170,7 @@ fn to_pog_config(config: PostgresConfig) -> pog.Config {
   |> pog.password(config.password)
   |> pog.ssl(config.ssl)
   |> pog.pool_size(config.pool_size)
+  |> pog.idle_interval(config.idle_interval)
 }
 
 /// Start a connection pool using the provided configuration.
@@ -537,8 +564,63 @@ pub fn execute_sql_mutation(
   )
 }
 
+/// Execute a raw SQL query with a custom timeout.
+/// The timeout is in milliseconds. Use this for queries that may take
+/// longer than the default 5 second timeout.
+pub fn execute_sql_with_timeout(
+  conn: PostgresConnection,
+  sql: String,
+  params: List(QueryParam),
+  timeout_ms: Int,
+) -> Result(List(List(Dynamic)), AdapterError) {
+  let PostgresConnection(pool) = conn
+  let values = params_to_values(params)
+
+  let query =
+    pog.query(sql)
+    |> add_parameters(values)
+    |> pog.timeout(timeout_ms)
+    |> pog.returning(decode.dynamic)
+
+  case pog.execute(query, pool) {
+    Ok(pog.Returned(_, rows)) -> Ok(list.map(rows, wrap_row))
+    Error(err) -> Error(map_query_error(err))
+  }
+}
+
+/// Execute a raw SQL mutation with a custom timeout.
+/// The timeout is in milliseconds.
+pub fn execute_sql_mutation_with_timeout(
+  conn: PostgresConnection,
+  sql: String,
+  params: List(QueryParam),
+  timeout_ms: Int,
+) -> Result(Int, AdapterError) {
+  let PostgresConnection(pool) = conn
+  let values = params_to_values(params)
+
+  let query =
+    pog.query(sql)
+    |> add_parameters(values)
+    |> pog.timeout(timeout_ms)
+    |> pog.returning(decode.dynamic)
+
+  case pog.execute(query, pool) {
+    Ok(pog.Returned(count, _)) -> Ok(count)
+    Error(err) -> Error(map_query_error(err))
+  }
+}
+
 // ============================================================================
 // ROW DECODING HELPERS
+// ============================================================================
+//
+// Note: Row decoding converts PostgreSQL result tuples to lists. The current
+// implementation handles tuples with up to 6 elements. For queries returning
+// more than 6 columns, consider:
+// 1. Using SELECT with specific columns instead of SELECT *
+// 2. Breaking the query into multiple smaller queries
+// 3. Using pog directly with rows_as_map option for wider result sets
 // ============================================================================
 
 /// Decode a single integer value from a result row

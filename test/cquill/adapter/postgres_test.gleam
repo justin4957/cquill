@@ -113,6 +113,8 @@ pub fn default_config_test() {
   config.user |> should.equal("postgres")
   config.password |> should.equal(None)
   config.pool_size |> should.equal(10)
+  config.default_timeout |> should.equal(5000)
+  config.idle_interval |> should.equal(1000)
 }
 
 pub fn config_builder_functions_test() {
@@ -133,6 +135,39 @@ pub fn config_builder_functions_test() {
   config.user |> should.equal("test_user")
   config.password |> should.equal(Some("secret"))
   config.pool_size |> should.equal(20)
+}
+
+pub fn config_timeout_settings_test() {
+  let name = process.new_name("cquill_test_pool_timeout")
+  let config =
+    postgres.default_config(name)
+    |> postgres.default_timeout(10_000)
+    |> postgres.idle_interval(2000)
+
+  config.default_timeout |> should.equal(10_000)
+  config.idle_interval |> should.equal(2000)
+}
+
+pub fn config_production_settings_test() {
+  // Test a typical production configuration
+  let name = process.new_name("cquill_test_pool_prod")
+  let config =
+    postgres.default_config(name)
+    |> postgres.host("db.example.com")
+    |> postgres.port(5432)
+    |> postgres.database("myapp_production")
+    |> postgres.user("myapp")
+    |> postgres.password(Some("secure_password"))
+    |> postgres.ssl(pog.SslVerified)
+    |> postgres.pool_size(25)
+    |> postgres.default_timeout(30_000)
+    |> postgres.idle_interval(5000)
+
+  config.host |> should.equal("db.example.com")
+  config.database |> should.equal("myapp_production")
+  config.pool_size |> should.equal(25)
+  config.default_timeout |> should.equal(30_000)
+  config.idle_interval |> should.equal(5000)
 }
 
 // ============================================================================
