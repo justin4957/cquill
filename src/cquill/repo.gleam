@@ -527,6 +527,225 @@ pub fn delete_all(
 }
 
 // ============================================================================
+// BATCH OPERATIONS
+// ============================================================================
+
+/// Configuration for batch operations
+pub type BatchConfig {
+  BatchConfig(
+    /// Maximum rows per batch (for chunking large operations)
+    max_batch_size: Int,
+    /// Whether to wrap the operation in a transaction (for atomicity)
+    use_transaction: Bool,
+  )
+}
+
+/// Default batch configuration
+pub fn default_batch_config() -> BatchConfig {
+  BatchConfig(max_batch_size: 1000, use_transaction: True)
+}
+
+/// Insert multiple records using compiled queries.
+/// Each query in the list represents one row to insert.
+///
+/// ## Example
+/// ```gleam
+/// let queries = [
+///   adapter.CompiledQuery(
+///     sql: "INSERT INTO users (email, name) VALUES ($1, $2)",
+///     params: [adapter.param_string("a@test.com"), adapter.param_string("Alice")],
+///     expected_columns: 0
+///   ),
+///   adapter.CompiledQuery(
+///     sql: "INSERT INTO users (email, name) VALUES ($1, $2)",
+///     params: [adapter.param_string("b@test.com"), adapter.param_string("Bob")],
+///     expected_columns: 0
+///   ),
+/// ]
+/// repo.batch_insert(adapter, conn, queries)
+/// ```
+pub fn batch_insert(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+) -> Result(Int, RepoError) {
+  batch_insert_with_config(adapter, connection, queries, default_batch_config())
+}
+
+/// Insert multiple records with configuration options.
+pub fn batch_insert_with_config(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  config: BatchConfig,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(0)
+    _ -> {
+      case config.use_transaction {
+        True ->
+          // Use transaction for atomicity
+          case
+            transaction(adapter, connection, fn(tx_conn) {
+              do_batch_insert(adapter, tx_conn, queries, 0)
+            })
+          {
+            Ok(count) -> Ok(count)
+            Error(UserAborted(err)) -> Error(err)
+            Error(AdapterError(adapter_err)) ->
+              Error(from_adapter_error(adapter_err, "batch_insert"))
+            Error(err) -> Error(QueryError(format_tx_error(err)))
+          }
+        False ->
+          // No transaction, just run inserts
+          do_batch_insert(adapter, connection, queries, 0)
+      }
+    }
+  }
+}
+
+/// Execute batch inserts sequentially
+fn do_batch_insert(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  count: Int,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(count)
+    [query, ..rest] ->
+      case adapter.mutate(adapter, connection, query) {
+        Error(err) -> Error(from_adapter_error(err, "batch_insert"))
+        Ok(n) -> do_batch_insert(adapter, connection, rest, count + n)
+      }
+  }
+}
+
+/// Format transaction error to string
+fn format_tx_error(err: RepoTransactionError(RepoError)) -> String {
+  case err {
+    UserAborted(_) -> "User aborted batch operation"
+    AdapterError(adapter_err) ->
+      "Adapter error: " <> error.format_error(adapter_err)
+    TransactionFailed(reason) -> "Transaction failed: " <> reason
+    CommitFailed(reason) -> "Commit failed: " <> reason
+    RolledBack -> "Transaction rolled back"
+    TransactionTimedOut -> "Transaction timed out"
+    SerializationConflict -> "Serialization conflict"
+  }
+}
+
+/// Batch update multiple records.
+/// Each query in the list represents one update operation.
+pub fn batch_update(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+) -> Result(Int, RepoError) {
+  batch_update_with_config(adapter, connection, queries, default_batch_config())
+}
+
+/// Batch update with configuration options.
+pub fn batch_update_with_config(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  config: BatchConfig,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(0)
+    _ -> {
+      case config.use_transaction {
+        True ->
+          case
+            transaction(adapter, connection, fn(tx_conn) {
+              do_batch_update(adapter, tx_conn, queries, 0)
+            })
+          {
+            Ok(count) -> Ok(count)
+            Error(UserAborted(err)) -> Error(err)
+            Error(AdapterError(adapter_err)) ->
+              Error(from_adapter_error(adapter_err, "batch_update"))
+            Error(err) -> Error(QueryError(format_tx_error(err)))
+          }
+        False -> do_batch_update(adapter, connection, queries, 0)
+      }
+    }
+  }
+}
+
+fn do_batch_update(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  count: Int,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(count)
+    [query, ..rest] ->
+      case adapter.mutate(adapter, connection, query) {
+        Error(err) -> Error(from_adapter_error(err, "batch_update"))
+        Ok(n) -> do_batch_update(adapter, connection, rest, count + n)
+      }
+  }
+}
+
+/// Batch delete multiple records.
+/// Each query in the list represents one delete operation.
+pub fn batch_delete(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+) -> Result(Int, RepoError) {
+  batch_delete_with_config(adapter, connection, queries, default_batch_config())
+}
+
+/// Batch delete with configuration options.
+pub fn batch_delete_with_config(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  config: BatchConfig,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(0)
+    _ -> {
+      case config.use_transaction {
+        True ->
+          case
+            transaction(adapter, connection, fn(tx_conn) {
+              do_batch_delete(adapter, tx_conn, queries, 0)
+            })
+          {
+            Ok(count) -> Ok(count)
+            Error(UserAborted(err)) -> Error(err)
+            Error(AdapterError(adapter_err)) ->
+              Error(from_adapter_error(adapter_err, "batch_delete"))
+            Error(err) -> Error(QueryError(format_tx_error(err)))
+          }
+        False -> do_batch_delete(adapter, connection, queries, 0)
+      }
+    }
+  }
+}
+
+fn do_batch_delete(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  queries: List(CompiledQuery),
+  count: Int,
+) -> Result(Int, RepoError) {
+  case queries {
+    [] -> Ok(count)
+    [query, ..rest] ->
+      case adapter.mutate(adapter, connection, query) {
+        Error(err) -> Error(from_adapter_error(err, "batch_delete"))
+        Ok(n) -> do_batch_delete(adapter, connection, rest, count + n)
+      }
+  }
+}
+
+// ============================================================================
 // TRANSACTION SUPPORT
 // ============================================================================
 
