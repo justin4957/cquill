@@ -61,9 +61,16 @@ pub type ForeignKeyConstraint {
   )
 }
 
-/// Snapshot of store state for transaction rollback
+/// Snapshot of store state for transaction rollback or savepoint
 pub type Snapshot {
-  Snapshot(tables: Dict(String, MemoryTable), id_counters: Dict(String, Int))
+  Snapshot(
+    /// Optional name for savepoints (None for transaction snapshots)
+    name: Option(String),
+    /// Tables at snapshot time
+    tables: Dict(String, MemoryTable),
+    /// Auto-increment counters at snapshot time
+    id_counters: Dict(String, Int),
+  )
 }
 
 /// The in-memory database connection/store
@@ -790,10 +797,11 @@ fn execute_returning(
 /// Begin a transaction by taking a snapshot
 /// Supports nested transactions via snapshot stack
 fn begin_transaction(store: MemoryStore) -> Result(MemoryStore, AdapterError) {
-  // Create snapshot of current state
+  // Create snapshot of current state (unnamed, for transaction)
   let id_counters =
     dict.map_values(store.tables, fn(_name, table) { table.next_id })
-  let snapshot = Snapshot(tables: store.tables, id_counters: id_counters)
+  let snapshot =
+    Snapshot(name: None, tables: store.tables, id_counters: id_counters)
 
   // Push snapshot onto the stack
   Ok(
@@ -921,6 +929,209 @@ pub fn execute_transaction(
       }
     }
   }
+}
+
+// ============================================================================
+// SAVEPOINT SUPPORT
+// ============================================================================
+
+/// Create a savepoint with the given name.
+/// Requires an active transaction.
+pub fn create_savepoint(
+  store: MemoryStore,
+  name: String,
+) -> Result(MemoryStore, error.SavepointError(Nil)) {
+  case store.in_transaction {
+    False -> Error(error.SavepointNoTransaction)
+    True -> {
+      // Create named snapshot
+      let id_counters =
+        dict.map_values(store.tables, fn(_table_name, table) { table.next_id })
+      let snapshot =
+        Snapshot(name: Some(name), tables: store.tables, id_counters:)
+
+      // Push onto snapshot stack
+      Ok(
+        MemoryStore(
+          ..store,
+          snapshots: [snapshot, ..store.snapshots],
+          snapshot: Some(snapshot),
+        ),
+      )
+    }
+  }
+}
+
+/// Rollback to a named savepoint, discarding all changes since it was created.
+/// Also removes the savepoint and any savepoints created after it.
+pub fn rollback_to_savepoint(
+  store: MemoryStore,
+  name: String,
+) -> Result(MemoryStore, error.SavepointError(Nil)) {
+  case store.in_transaction {
+    False -> Error(error.SavepointNoTransaction)
+    True -> {
+      case find_savepoint(store.snapshots, name) {
+        Error(_) -> Error(error.SavepointNotFound(name))
+        Ok(#(snapshot, remaining)) -> {
+          // Restore tables and id counters from the savepoint
+          let restored_tables =
+            dict.map_values(snapshot.tables, fn(table_name, table) {
+              case dict.get(snapshot.id_counters, table_name) {
+                Ok(id) -> MemoryTable(..table, next_id: id)
+                Error(_) -> table
+              }
+            })
+
+          // Determine new snapshot state
+          let new_snapshot = case remaining {
+            [s, ..] -> Some(s)
+            [] -> None
+          }
+
+          Ok(
+            MemoryStore(
+              ..store,
+              tables: restored_tables,
+              snapshots: remaining,
+              snapshot: new_snapshot,
+            ),
+          )
+        }
+      }
+    }
+  }
+}
+
+/// Release a savepoint without rolling back.
+/// This removes the savepoint, making its changes permanent (within the transaction).
+pub fn release_savepoint(
+  store: MemoryStore,
+  name: String,
+) -> Result(MemoryStore, error.SavepointError(Nil)) {
+  case store.in_transaction {
+    False -> Error(error.SavepointNoTransaction)
+    True -> {
+      case remove_savepoint(store.snapshots, name) {
+        Error(_) -> Error(error.SavepointNotFound(name))
+        Ok(remaining) -> {
+          // Determine new snapshot state
+          let new_snapshot = case remaining {
+            [s, ..] -> Some(s)
+            [] -> None
+          }
+
+          Ok(MemoryStore(..store, snapshots: remaining, snapshot: new_snapshot))
+        }
+      }
+    }
+  }
+}
+
+/// Execute a function within a savepoint.
+/// If the function returns an error, rolls back to the savepoint.
+/// If successful, releases the savepoint.
+pub fn execute_savepoint(
+  store: MemoryStore,
+  name: String,
+  operation: fn(MemoryStore) -> Result(#(MemoryStore, a), error.AdapterError),
+) -> Result(#(MemoryStore, a), error.SavepointError(Nil)) {
+  // Create savepoint
+  case create_savepoint(store, name) {
+    Error(e) -> Error(e)
+    Ok(sp_store) -> {
+      // Run the operation
+      case operation(sp_store) {
+        Ok(#(updated_store, result)) -> {
+          // Release savepoint on success (keep the changes)
+          case release_savepoint(updated_store, name) {
+            Ok(final_store) -> Ok(#(final_store, result))
+            Error(e) -> Error(e)
+          }
+        }
+        Error(adapter_err) -> {
+          // Rollback to savepoint on error
+          case rollback_to_savepoint(sp_store, name) {
+            Ok(rolled_back_store) ->
+              Error(error.SavepointAdapterError(adapter_err))
+            Error(_) -> Error(error.SavepointAdapterError(adapter_err))
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Find a savepoint by name in the snapshot stack.
+/// Returns the snapshot and the remaining stack (snapshots after the found one).
+fn find_savepoint(
+  snapshots: List(Snapshot),
+  name: String,
+) -> Result(#(Snapshot, List(Snapshot)), Nil) {
+  do_find_savepoint(snapshots, name, [])
+}
+
+fn do_find_savepoint(
+  snapshots: List(Snapshot),
+  name: String,
+  _skipped: List(Snapshot),
+) -> Result(#(Snapshot, List(Snapshot)), Nil) {
+  case snapshots {
+    [] -> Error(Nil)
+    [snapshot, ..rest] -> {
+      case snapshot.name {
+        Some(sp_name) if sp_name == name -> Ok(#(snapshot, rest))
+        _ -> do_find_savepoint(rest, name, [])
+      }
+    }
+  }
+}
+
+/// Remove a savepoint from the stack without restoring its state.
+/// Returns the modified stack with the savepoint removed.
+fn remove_savepoint(
+  snapshots: List(Snapshot),
+  name: String,
+) -> Result(List(Snapshot), Nil) {
+  do_remove_savepoint(snapshots, name, [])
+}
+
+fn do_remove_savepoint(
+  snapshots: List(Snapshot),
+  name: String,
+  before: List(Snapshot),
+) -> Result(List(Snapshot), Nil) {
+  case snapshots {
+    [] -> Error(Nil)
+    [snapshot, ..rest] -> {
+      case snapshot.name {
+        Some(sp_name) if sp_name == name -> {
+          // Found it, reconstruct the list without this snapshot
+          Ok(list.reverse(before) |> list.append(rest))
+        }
+        _ -> do_remove_savepoint(rest, name, [snapshot, ..before])
+      }
+    }
+  }
+}
+
+/// Check if a savepoint with the given name exists
+pub fn has_savepoint(store: MemoryStore, name: String) -> Bool {
+  case find_savepoint(store.snapshots, name) {
+    Ok(_) -> True
+    Error(_) -> False
+  }
+}
+
+/// Get the names of all active savepoints
+pub fn savepoint_names(store: MemoryStore) -> List(String) {
+  store.snapshots
+  |> list.filter_map(fn(snapshot) {
+    case snapshot.name {
+      Some(name) -> Ok(name)
+      None -> Error(Nil)
+    }
+  })
 }
 
 // ============================================================================

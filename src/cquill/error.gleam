@@ -134,6 +134,31 @@ pub type TransactionError(e) {
 }
 
 // ============================================================================
+// SAVEPOINT ERROR TYPE
+// ============================================================================
+
+/// Savepoint-specific error wrapper for partial rollback operations
+pub type SavepointError(e) {
+  /// Savepoint with the given name was not found
+  SavepointNotFound(name: String)
+
+  /// Error from the adapter/database during savepoint operation
+  SavepointAdapterError(AdapterError)
+
+  /// The user-provided function returned an error
+  SavepointUserError(e)
+
+  /// Savepoint creation failed
+  SavepointCreationFailed(reason: String)
+
+  /// Savepoint release failed
+  SavepointReleaseFailed(reason: String)
+
+  /// Not in a transaction (savepoints require an active transaction)
+  SavepointNoTransaction
+}
+
+// ============================================================================
 // ERROR CLASSIFICATION
 // ============================================================================
 
@@ -280,6 +305,19 @@ pub fn format_transaction_error(error: TransactionError(e)) -> String {
     TransactionTimeout -> "Transaction timed out"
     SerializationFailure ->
       "Serialization failure: concurrent transaction conflict (retry may succeed)"
+  }
+}
+
+/// Format a savepoint error for display
+pub fn format_savepoint_error(error: SavepointError(e)) -> String {
+  case error {
+    SavepointNotFound(name) -> "Savepoint not found: " <> name
+    SavepointAdapterError(adapter_err) ->
+      "Savepoint operation failed: " <> format_error(adapter_err)
+    SavepointUserError(_) -> "Savepoint aborted: user error"
+    SavepointCreationFailed(reason) -> "Failed to create savepoint: " <> reason
+    SavepointReleaseFailed(reason) -> "Failed to release savepoint: " <> reason
+    SavepointNoTransaction -> "Cannot use savepoint outside of a transaction"
   }
 }
 
