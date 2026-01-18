@@ -45,6 +45,8 @@ pub type GenerateOptions {
     dry_run: Bool,
     /// Enable verbose output
     verbose: Bool,
+    /// Generate typed columns for type-safe query builder
+    typed: Bool,
   )
 }
 
@@ -121,6 +123,7 @@ pub fn default_generate_options() -> GenerateOptions {
     format: True,
     dry_run: False,
     verbose: False,
+    typed: True,
   )
 }
 
@@ -206,6 +209,13 @@ fn parse_generate_args(
     // Verbose flag
     ["--verbose", ..rest] | ["-v", ..rest] ->
       parse_generate_args(rest, GenerateOptions(..opts, verbose: True))
+
+    // Typed column generation flag
+    ["--typed", ..rest] ->
+      parse_generate_args(rest, GenerateOptions(..opts, typed: True))
+
+    ["--no-typed", ..rest] ->
+      parse_generate_args(rest, GenerateOptions(..opts, typed: False))
 
     // Handle options that need values but are at end of list
     ["--database-url"] -> Error(MissingValue("database-url"))
@@ -313,6 +323,10 @@ GENERATE OPTIONS:
     -n, --dry-run           Show what would be generated without writing
 
     -v, --verbose           Enable verbose output
+
+    --typed                 Generate typed columns for type-safe queries
+                            Default: true
+    --no-typed              Skip typed column generation
 
 EXAMPLES:
     # Basic usage
