@@ -21,6 +21,7 @@
 // ```
 
 import cquill/query/ast
+import cquill/typed/raw.{type RawExpr}
 import cquill/typed/table.{
   type AliasedTable, type Column, type Join2, type Join3, type Table,
   aliased_table_alias, aliased_table_qualified_name, column_name,
@@ -1066,6 +1067,132 @@ pub fn typed_get_limit(query: TypedQuery(t)) -> Option(Int) {
 pub fn typed_get_offset(query: TypedQuery(t)) -> Option(Int) {
   let TypedQuery(inner: inner) = query
   inner.offset
+}
+
+// ============================================================================
+// RAW SQL ESCAPE HATCHES
+// ============================================================================
+
+/// Add a raw SQL WHERE condition to the query.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_where_raw(raw("created_at > NOW() - INTERVAL '7 days'"))
+/// ```
+pub fn typed_where_raw(query: TypedQuery(t), expr: RawExpr) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let condition = raw.raw_to_condition(expr)
+  let new_wheres = list.append(inner.wheres, [ast.Where(condition)])
+  TypedQuery(inner: ast.Query(..inner, wheres: new_wheres))
+}
+
+/// Add raw SQL expressions to the SELECT clause.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_select_raw([
+///     raw.count_over_with_alias("total"),
+///     raw.raw("EXTRACT(year FROM created_at) AS year"),
+///   ])
+/// ```
+pub fn typed_select_raw(
+  query: TypedQuery(t),
+  expressions: List(RawExpr),
+) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let select_exprs =
+    list.map(expressions, fn(expr) { raw.raw_to_select_expr(expr, None) })
+  TypedQuery(inner: ast.Query(..inner, select: ast.SelectExpr(select_exprs)))
+}
+
+/// Add raw SQL expressions to the SELECT clause with aliases.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_select_raw_aliased([
+///     #(raw.count_all(), "total_count"),
+///     #(raw.now(), "query_time"),
+///   ])
+/// ```
+pub fn typed_select_raw_aliased(
+  query: TypedQuery(t),
+  expressions: List(#(RawExpr, String)),
+) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let select_exprs =
+    list.map(expressions, fn(pair) {
+      let #(expr, alias) = pair
+      raw.raw_to_select_expr(expr, Some(alias))
+    })
+  TypedQuery(inner: ast.Query(..inner, select: ast.SelectExpr(select_exprs)))
+}
+
+/// Add a raw SQL ORDER BY clause.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_order_by_raw(raw.random(), ast.Asc)  // Random order
+/// ```
+pub fn typed_order_by_raw(
+  query: TypedQuery(t),
+  expr: RawExpr,
+  direction: ast.Direction,
+) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let new_order = raw.raw_to_order_by(expr, direction)
+  let new_order_bys = list.append(inner.order_bys, [new_order])
+  TypedQuery(inner: ast.Query(..inner, order_bys: new_order_bys))
+}
+
+/// Add a raw SQL GROUP BY expression.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(orders)
+/// |> typed_group_by_raw(raw.date_trunc("month", created_at))
+/// ```
+pub fn typed_group_by_raw(query: TypedQuery(t), expr: RawExpr) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let new_group_bys = list.append(inner.group_bys, [raw.raw_sql(expr)])
+  TypedQuery(inner: ast.Query(..inner, group_bys: new_group_bys))
+}
+
+/// Add a raw SQL HAVING condition.
+/// WARNING: Raw SQL bypasses compile-time type checking.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(orders)
+/// |> typed_group_by(user_id)
+/// |> typed_having_raw(raw.raw("COUNT(*) > 5"))
+/// ```
+pub fn typed_having_raw(query: TypedQuery(t), expr: RawExpr) -> TypedQuery(t) {
+  let TypedQuery(inner: inner) = query
+  let condition = raw.raw_to_condition(expr)
+  let new_havings = list.append(inner.havings, [ast.Where(condition)])
+  TypedQuery(inner: ast.Query(..inner, havings: new_havings))
+}
+
+/// Create a raw typed condition for use in typed_where.
+/// This allows mixing typed and raw conditions.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_where(typed_eq(active, True))
+/// |> typed_where(typed_raw_condition(raw("created_at > NOW() - INTERVAL '7 days'")))
+/// ```
+pub fn typed_raw_condition(expr: RawExpr) -> TypedCondition(t) {
+  TypedCondition(inner: raw.raw_to_condition(expr))
 }
 
 // ============================================================================
