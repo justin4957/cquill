@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=myapp
+
+users 2024-01-15T12:00:00Z Developer <dev@example.com> # Add users table
+posts [users] 2024-01-15T13:00:00Z Developer <dev@example.com> # Add posts table (requires users)

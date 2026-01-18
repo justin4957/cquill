@@ -1,0 +1,103 @@
+# GitHub Actions workflow for production deployment
+# Copy this to .github/workflows/deploy.yml
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      # Run migrations BEFORE deploying new code
+      # This ensures the database schema is ready for the new application version
+      - name: Run database migrations
+        run: dbmate up
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Setup Erlang/OTP and Gleam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          gleam-version: "1.4"
+
+      - name: Build release
+        run: gleam build --target erlang
+
+      # Example: Deploy to Fly.io
+      # Uncomment and customize for your deployment target
+      #
+      # - name: Deploy to Fly.io
+      #   uses: superfly/flyctl-actions/setup-flyctl@master
+      # - run: flyctl deploy --remote-only
+      #   env:
+      #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Example: Deploy to a server via SSH
+      #
+      # - name: Deploy to server
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host: ${{ secrets.DEPLOY_HOST }}
+      #     username: ${{ secrets.DEPLOY_USER }}
+      #     key: ${{ secrets.DEPLOY_KEY }}
+      #     script: |
+      #       cd /app
+      #       git pull
+      #       ./scripts/restart.sh
+
+      # Example: Deploy Docker image
+      #
+      # - name: Build and push Docker image
+      #   run: |
+      #     docker build -t myapp:${{ github.sha }} .
+      #     docker push myapp:${{ github.sha }}
+      #
+      # - name: Update Kubernetes deployment
+      #   run: |
+      #     kubectl set image deployment/myapp myapp=myapp:${{ github.sha }}
+
+      - name: Notify deployment complete
+        run: echo "Deployment complete!"
+
+  # Optional: Rollback job
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    if: failure()
+    needs: deploy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      # Rollback the last migration if deployment failed
+      # Be careful: this may cause data loss!
+      - name: Rollback migration (if safe)
+        run: |
+          echo "WARNING: Automatic rollback is disabled."
+          echo "Manual intervention required."
+          # Uncomment to enable automatic rollback:
+          # dbmate down
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
