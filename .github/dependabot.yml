@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 5
+
+  # Hex dependencies (Gleam/Erlang packages)
+  - package-ecosystem: "hex"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+      - "hex"
+    open-pull-requests-limit: 5
+    # Group minor and patch updates together
+    groups:
+      dev-dependencies:
+        patterns:
+          - "gleeunit"
+          - "gleescript"
+        update-types:
+          - "minor"
+          - "patch"
+      runtime-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "gleeunit"
+          - "gleescript"
+        update-types:
+          - "minor"
+          - "patch"
