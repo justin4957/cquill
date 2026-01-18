@@ -33,3 +33,13 @@ export function coerce_value(value) {
 
   return { type: 'UnknownVal' };
 }
+
+// Escape single quotes in SQL strings by doubling them
+export function escape_sql_string(str) {
+  return str.replace(/'/g, "''");
+}
+
+// Convert float to string
+export function float_to_string(f) {
+  return String(f);
+}
