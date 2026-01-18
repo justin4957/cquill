@@ -13,7 +13,9 @@
 // - Repository pattern (domain-focused abstraction)
 // - Rust/Gleam Option/Result patterns for type-safe optionality
 
-import cquill/error.{BeginFailed, CommitFailed, NotSupported, UserError}
+import cquill/error.{
+  AdapterTransactionError, BeginFailed, CommitFailed, NotSupported, UserError,
+}
 import gleam/option.{type Option}
 
 // ============================================================================
@@ -341,7 +343,8 @@ pub fn insert_returning(
 }
 
 /// Execute a function within a transaction.
-/// Returns UserError if adapter doesn't support transactions and operation fails.
+/// Returns UserError if the user's operation function fails.
+/// Returns AdapterTransactionError if the adapter/database fails during the transaction.
 pub fn transaction(
   adapter: Adapter(conn, row),
   connection: conn,
@@ -367,7 +370,10 @@ pub fn transaction(
     True -> {
       // Start transaction
       case begin_transaction(connection) {
-        Error(_) -> Error(BeginFailed("Could not begin transaction"))
+        Error(adapter_err) ->
+          Error(BeginFailed(
+            "Could not begin transaction: " <> error.format_error(adapter_err),
+          ))
         Ok(tx_conn) -> {
           // Run the operation
           case operation(tx_conn) {
@@ -375,13 +381,67 @@ pub fn transaction(
               // Commit on success
               case commit_transaction(tx_conn) {
                 Ok(_) -> Ok(result)
-                Error(_) -> Error(CommitFailed("Commit failed"))
+                Error(adapter_err) ->
+                  Error(CommitFailed(
+                    "Commit failed: " <> error.format_error(adapter_err),
+                  ))
               }
             }
             Error(e) -> {
               // Rollback on error
               let _ = rollback_transaction(tx_conn)
               Error(UserError(e))
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Execute a function within a transaction with adapter error handling.
+/// This version allows the operation to return AdapterError, which is wrapped
+/// in AdapterTransactionError on failure instead of UserError.
+pub fn transaction_with_adapter_errors(
+  adapter: Adapter(conn, row),
+  connection: conn,
+  operation: fn(conn) -> Result(a, AdapterError),
+) -> Result(a, TransactionError(Nil)) {
+  let Adapter(
+    capabilities:,
+    begin_transaction:,
+    commit_transaction:,
+    rollback_transaction:,
+    ..,
+  ) = adapter
+
+  case capabilities.transactions {
+    False ->
+      case operation(connection) {
+        Ok(result) -> Ok(result)
+        Error(adapter_err) -> Error(AdapterTransactionError(adapter_err))
+      }
+
+    True -> {
+      case begin_transaction(connection) {
+        Error(adapter_err) ->
+          Error(BeginFailed(
+            "Could not begin transaction: " <> error.format_error(adapter_err),
+          ))
+        Ok(tx_conn) -> {
+          case operation(tx_conn) {
+            Ok(result) -> {
+              case commit_transaction(tx_conn) {
+                Ok(_) -> Ok(result)
+                Error(adapter_err) ->
+                  Error(CommitFailed(
+                    "Commit failed: " <> error.format_error(adapter_err),
+                  ))
+              }
+            }
+            Error(adapter_err) -> {
+              let _ = rollback_transaction(tx_conn)
+              Error(AdapterTransactionError(adapter_err))
             }
           }
         }
