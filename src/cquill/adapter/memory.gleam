@@ -436,6 +436,302 @@ pub fn row_count(
 }
 
 // ============================================================================
+// BATCH OPERATIONS
+// ============================================================================
+
+/// Configuration for batch operations
+pub type BatchConfig {
+  BatchConfig(
+    /// Maximum records per batch (for chunking large inserts)
+    max_batch_size: Int,
+    /// Whether to wrap in transaction (for atomicity)
+    use_transaction: Bool,
+  )
+}
+
+/// Default batch configuration
+pub fn default_batch_config() -> BatchConfig {
+  BatchConfig(max_batch_size: 1000, use_transaction: True)
+}
+
+/// Insert multiple rows atomically.
+/// All rows are inserted or none are (atomic behavior).
+/// Returns the number of inserted rows on success.
+pub fn insert_all(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  insert_all_with_config(store, table_name, rows, default_batch_config())
+}
+
+/// Insert multiple rows with configuration options.
+/// When use_transaction is True, all rows are inserted atomically.
+/// Returns the number of inserted rows on success.
+pub fn insert_all_with_config(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+  config: BatchConfig,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case config.use_transaction {
+    True -> insert_all_atomic(store, table_name, rows)
+    False -> insert_all_non_atomic(store, table_name, rows)
+  }
+}
+
+/// Insert all rows atomically - all succeed or none
+fn insert_all_atomic(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  // Validate all rows first before inserting any
+  case dict.get(store.tables, table_name) {
+    Error(_) -> Error(error.AdapterSpecific("TABLE_NOT_FOUND", table_name))
+    Ok(table) -> {
+      // Validate all rows for constraints
+      case validate_batch_insert(store, table, rows) {
+        Error(e) -> Error(e)
+        Ok(_) -> {
+          // All valid, insert atomically
+          do_insert_all(store, table_name, rows, 0)
+        }
+      }
+    }
+  }
+}
+
+/// Validate all rows before inserting (for atomic operations)
+fn validate_batch_insert(
+  store: MemoryStore,
+  table: MemoryTable,
+  rows: List(#(String, MemoryRow)),
+) -> Result(Nil, AdapterError) {
+  // Check for duplicate keys within the batch
+  let keys = list.map(rows, fn(pair) { pair.0 })
+  case has_duplicate_keys(keys) {
+    True ->
+      Error(error.UniqueViolation(
+        table.name <> "_pkey",
+        "Duplicate keys within batch",
+      ))
+    False -> {
+      // Check each row for constraints
+      validate_rows_for_insert(store, table, rows)
+    }
+  }
+}
+
+/// Check if a list has duplicate keys
+fn has_duplicate_keys(keys: List(String)) -> Bool {
+  do_has_duplicate_keys(keys, dict.new())
+}
+
+fn do_has_duplicate_keys(keys: List(String), seen: Dict(String, Bool)) -> Bool {
+  case keys {
+    [] -> False
+    [key, ..rest] ->
+      case dict.has_key(seen, key) {
+        True -> True
+        False -> do_has_duplicate_keys(rest, dict.insert(seen, key, True))
+      }
+  }
+}
+
+/// Validate all rows for insert constraints
+fn validate_rows_for_insert(
+  store: MemoryStore,
+  table: MemoryTable,
+  rows: List(#(String, MemoryRow)),
+) -> Result(Nil, AdapterError) {
+  case rows {
+    [] -> Ok(Nil)
+    [#(key, row), ..rest] -> {
+      // Check primary key doesn't already exist
+      case dict.has_key(table.rows, key) {
+        True ->
+          Error(error.UniqueViolation(
+            table.name <> "_pkey",
+            "Key (" <> key <> ") already exists",
+          ))
+        False -> {
+          // Check not-null constraints
+          case check_not_null_constraints(table, row) {
+            Error(e) -> Error(e)
+            Ok(_) -> {
+              // Check unique constraints
+              case check_unique_constraints(table, row, None) {
+                Error(e) -> Error(e)
+                Ok(_) -> {
+                  // Check foreign key constraints
+                  case check_foreign_key_constraints(store, table, row) {
+                    Error(e) -> Error(e)
+                    Ok(_) -> validate_rows_for_insert(store, table, rest)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Actually insert all validated rows
+fn do_insert_all(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+  count: Int,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case rows {
+    [] -> Ok(#(store, count))
+    [#(key, row), ..rest] ->
+      case insert_row(store, table_name, key, row) {
+        Error(e) -> Error(e)
+        Ok(new_store) -> do_insert_all(new_store, table_name, rest, count + 1)
+      }
+  }
+}
+
+/// Insert rows non-atomically (stop on first error, keep prior inserts)
+fn insert_all_non_atomic(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  do_insert_all(store, table_name, rows, 0)
+}
+
+/// Update all rows matching a predicate.
+/// Returns the number of updated rows.
+pub fn update_all(
+  store: MemoryStore,
+  table_name: String,
+  predicate: fn(String, MemoryRow) -> Bool,
+  updater: fn(MemoryRow) -> MemoryRow,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case dict.get(store.tables, table_name) {
+    Error(_) -> Error(error.AdapterSpecific("TABLE_NOT_FOUND", table_name))
+    Ok(table) -> {
+      // Find matching rows
+      let matching =
+        dict.to_list(table.rows)
+        |> list.filter(fn(pair) { predicate(pair.0, pair.1) })
+
+      // Update each matching row
+      do_update_all(store, table_name, matching, updater, 0)
+    }
+  }
+}
+
+fn do_update_all(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+  updater: fn(MemoryRow) -> MemoryRow,
+  count: Int,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case rows {
+    [] -> Ok(#(store, count))
+    [#(key, row), ..rest] -> {
+      let updated_row = updater(row)
+      case update_row(store, table_name, key, updated_row) {
+        Error(e) -> Error(e)
+        Ok(new_store) ->
+          do_update_all(new_store, table_name, rest, updater, count + 1)
+      }
+    }
+  }
+}
+
+/// Update all rows with new values (simple version without predicate).
+/// Useful for "UPDATE table SET column = value" style updates.
+pub fn update_all_rows(
+  store: MemoryStore,
+  table_name: String,
+  updater: fn(MemoryRow) -> MemoryRow,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  update_all(store, table_name, fn(_, _) { True }, updater)
+}
+
+/// Delete all rows matching a predicate.
+/// Returns the number of deleted rows.
+pub fn delete_all(
+  store: MemoryStore,
+  table_name: String,
+  predicate: fn(String, MemoryRow) -> Bool,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case dict.get(store.tables, table_name) {
+    Error(_) -> Error(error.AdapterSpecific("TABLE_NOT_FOUND", table_name))
+    Ok(table) -> {
+      // Find matching rows
+      let matching =
+        dict.to_list(table.rows)
+        |> list.filter(fn(pair) { predicate(pair.0, pair.1) })
+
+      // Delete each matching row
+      do_delete_all(store, table_name, matching, 0)
+    }
+  }
+}
+
+fn do_delete_all(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(#(String, MemoryRow)),
+  count: Int,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  case rows {
+    [] -> Ok(#(store, count))
+    [#(key, _row), ..rest] ->
+      case delete_row(store, table_name, key) {
+        Error(e) -> Error(e)
+        Ok(new_store) -> do_delete_all(new_store, table_name, rest, count + 1)
+      }
+  }
+}
+
+/// Delete all rows in a table (truncate).
+/// Returns the number of deleted rows.
+pub fn delete_all_rows(
+  store: MemoryStore,
+  table_name: String,
+) -> Result(#(MemoryStore, Int), AdapterError) {
+  delete_all(store, table_name, fn(_, _) { True })
+}
+
+/// Insert multiple rows using auto-generated keys.
+/// Returns the inserted keys and updated store.
+pub fn insert_all_with_auto_keys(
+  store: MemoryStore,
+  table_name: String,
+  rows: List(MemoryRow),
+) -> Result(#(MemoryStore, List(String), Int), AdapterError) {
+  case dict.get(store.tables, table_name) {
+    Error(_) -> Error(error.AdapterSpecific("TABLE_NOT_FOUND", table_name))
+    Ok(table) -> {
+      let start_id = table.next_id
+      // Generate keys for all rows
+      let rows_with_keys =
+        list.index_map(rows, fn(row, idx) {
+          #(int.to_string(start_id + idx), row)
+        })
+      // Insert all
+      case insert_all(store, table_name, rows_with_keys) {
+        Error(e) -> Error(e)
+        Ok(#(new_store, count)) -> {
+          let keys = list.map(rows_with_keys, fn(pair) { pair.0 })
+          Ok(#(new_store, keys, count))
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
 // CONSTRAINT CHECKING
 // ============================================================================
 
