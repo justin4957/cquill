@@ -5,21 +5,24 @@
 
 import cquill/query/ast
 import cquill/typed/query.{
-  condition_to_ast, to_ast, typed_and, typed_between, typed_column_eq,
-  typed_contains, typed_distinct, typed_ends_with, typed_eq, typed_eq_columns,
-  typed_from, typed_get_limit, typed_get_offset, typed_group_by, typed_gt,
-  typed_gt_columns, typed_gte, typed_has_conditions, typed_has_order_by,
-  typed_has_pagination, typed_having, typed_ilike, typed_in, typed_is_distinct,
-  typed_is_not_null, typed_is_null, typed_join, typed_left_join, typed_like,
-  typed_limit, typed_lt, typed_lt_columns, typed_lte, typed_not, typed_not_eq,
-  typed_not_eq_columns, typed_not_ilike, typed_not_in, typed_not_like,
-  typed_offset, typed_or, typed_or_where, typed_order_by_asc,
-  typed_order_by_clear, typed_order_by_desc, typed_paginate, typed_select,
-  typed_select_all, typed_starts_with, typed_where, typed_where_clear,
+  condition_to_ast, on, on_and, to_ast, typed_and, typed_between,
+  typed_column_eq, typed_contains, typed_cross_join, typed_cross_join_aliased,
+  typed_distinct, typed_ends_with, typed_eq, typed_eq_columns, typed_from,
+  typed_get_limit, typed_get_offset, typed_group_by, typed_gt, typed_gt_columns,
+  typed_gte, typed_has_conditions, typed_has_order_by, typed_has_pagination,
+  typed_having, typed_ilike, typed_in, typed_is_distinct, typed_is_not_null,
+  typed_is_null, typed_join, typed_join_aliased, typed_left_join,
+  typed_left_join_aliased, typed_like, typed_limit, typed_lt, typed_lt_columns,
+  typed_lte, typed_not, typed_not_eq, typed_not_eq_columns, typed_not_ilike,
+  typed_not_in, typed_not_like, typed_offset, typed_or, typed_or_where,
+  typed_order_by_asc, typed_order_by_clear, typed_order_by_desc, typed_paginate,
+  typed_right_join, typed_select, typed_select_all, typed_starts_with,
+  typed_where, typed_where_clear,
 }
 import cquill/typed/table.{
-  type Column, type Join2, type Table, column, in_join2_left, in_join2_right,
-  table,
+  type AliasedTable, type Column, type Join2, type Table, alias_table,
+  aliased_column, column, in_join2_left, in_join2_right, left, right, table,
+  with_alias,
 }
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -824,6 +827,258 @@ pub fn cross_table_column_comparison_in_join_condition_test() {
     [ast.Join(join_type, table_name, _, _)] -> {
       join_type |> should.equal(ast.InnerJoin)
       table_name |> should.equal("posts")
+    }
+    _ -> should.fail()
+  }
+}
+
+// ============================================================================
+// TYPE-SAFE JOIN SUPPORT TESTS (Issue #26)
+// ============================================================================
+
+// --- Table Alias Tests ---
+
+pub fn alias_table_creates_aliased_table_test() {
+  let _aliased: AliasedTable(UserTable) = alias_table(users(), "u")
+
+  // Verify we can create an aliased table
+  should.be_true(True)
+}
+
+pub fn aliased_column_creates_prefixed_column_test() {
+  let aliased = alias_table(users(), "u")
+  let u_email: Column(UserTable, String) = aliased_column(aliased, "email")
+
+  // The column should work with the table type
+  let condition = typed_eq(u_email, "test@example.com")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Eq(field, _) -> {
+      field |> should.equal("u.email")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn with_alias_adds_prefix_to_column_test() {
+  let aliased_email = with_alias(user_email(), "u")
+  let condition = typed_eq(aliased_email, "test@example.com")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Eq(field, _) -> {
+      field |> should.equal("u.email")
+    }
+    _ -> should.fail()
+  }
+}
+
+// --- Column Lifting with left()/right() ---
+
+pub fn left_right_helpers_work_for_join_conditions_test() {
+  // Test using left() and right() helpers instead of in_join2_left/in_join2_right
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    typed_column_eq(left(user_id()), right(post_user_id()))
+
+  let query =
+    typed_from(users())
+    |> typed_join(posts(), on: join_condition)
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.joins)
+  |> should.equal(1)
+}
+
+// --- Cross Join Tests ---
+
+pub fn typed_cross_join_creates_cross_join_test() {
+  let query =
+    typed_from(users())
+    |> typed_cross_join(posts())
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.joins)
+  |> should.equal(1)
+
+  case ast_query.joins {
+    [ast.Join(join_type, table_name, _, _)] -> {
+      join_type |> should.equal(ast.CrossJoin)
+      table_name |> should.equal("posts")
+    }
+    _ -> should.fail()
+  }
+}
+
+// --- Aliased Join Tests ---
+
+pub fn typed_join_aliased_creates_join_with_alias_test() {
+  let managers: AliasedTable(UserTable) = alias_table(users(), "m")
+
+  // Create join condition using aliased columns
+  let manager_id: Column(UserTable, Int) = aliased_column(managers, "id")
+  let join_condition: query.TypedCondition(Join2(UserTable, UserTable)) =
+    typed_eq_columns(user_id(), manager_id)
+
+  let query =
+    typed_from(users())
+    |> typed_join_aliased(managers, on: join_condition)
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.joins)
+  |> should.equal(1)
+
+  case ast_query.joins {
+    [ast.Join(join_type, table_name, alias, _)] -> {
+      join_type |> should.equal(ast.InnerJoin)
+      table_name |> should.equal("users AS m")
+      alias |> should.equal(Some("m"))
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_left_join_aliased_creates_left_join_with_alias_test() {
+  let aliased_posts = alias_table(posts(), "p")
+  let p_user_id: Column(PostTable, Int) =
+    aliased_column(aliased_posts, "user_id")
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    typed_eq_columns(user_id(), p_user_id)
+
+  let query =
+    typed_from(users())
+    |> typed_left_join_aliased(aliased_posts, on: join_condition)
+
+  let ast_query = to_ast(query)
+  case ast_query.joins {
+    [ast.Join(join_type, _, alias, _)] -> {
+      join_type |> should.equal(ast.LeftJoin)
+      alias |> should.equal(Some("p"))
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_cross_join_aliased_creates_cross_join_with_alias_test() {
+  let aliased_posts = alias_table(posts(), "p")
+
+  let query =
+    typed_from(users())
+    |> typed_cross_join_aliased(aliased_posts)
+
+  let ast_query = to_ast(query)
+  case ast_query.joins {
+    [ast.Join(join_type, table_name, alias, _)] -> {
+      join_type |> should.equal(ast.CrossJoin)
+      table_name |> should.equal("posts AS p")
+      alias |> should.equal(Some("p"))
+    }
+    _ -> should.fail()
+  }
+}
+
+// --- on() and on_and() Helper Tests ---
+
+pub fn on_helper_creates_simple_join_condition_test() {
+  // The on() helper should create a simple equality condition
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    on(user_id(), post_user_id())
+
+  let ast_cond = condition_to_ast(join_condition)
+
+  case ast_cond {
+    ast.Raw(sql, params) -> {
+      sql |> should.equal("id = user_id")
+      list.length(params) |> should.equal(0)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn on_helper_works_in_typed_join_test() {
+  // Test using on() helper in an actual join
+  let query =
+    typed_from(users())
+    |> typed_join(posts(), on: on(user_id(), post_user_id()))
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.joins)
+  |> should.equal(1)
+}
+
+pub fn on_and_helper_creates_compound_condition_test() {
+  // The on_and() helper should create an AND condition with additional condition
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    on_and(user_id(), post_user_id(), typed_eq(right(post_user_id()), 1))
+
+  let ast_cond = condition_to_ast(join_condition)
+
+  case ast_cond {
+    ast.And(conditions) -> {
+      list.length(conditions) |> should.equal(2)
+    }
+    _ -> should.fail()
+  }
+}
+
+// --- Right Join Test ---
+
+pub fn typed_right_join_creates_right_join_test() {
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    typed_column_eq(in_join2_left(user_id()), in_join2_right(post_user_id()))
+
+  let query =
+    typed_from(users())
+    |> typed_right_join(posts(), on: join_condition)
+
+  let ast_query = to_ast(query)
+  case ast_query.joins {
+    [ast.Join(join_type, _, _, _)] -> {
+      join_type |> should.equal(ast.RightJoin)
+    }
+    _ -> should.fail()
+  }
+}
+
+// --- Complex Multi-Join Test ---
+
+pub fn complex_query_with_multiple_joins_test() {
+  // Test a complex query with multiple joins and conditions
+  let join1_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    on(user_id(), post_user_id())
+
+  let query =
+    typed_from(users())
+    |> typed_join(posts(), on: join1_condition)
+    |> typed_where(typed_eq(in_join2_left(user_active()), True))
+
+  let ast_query = to_ast(query)
+
+  list.length(ast_query.joins) |> should.equal(1)
+  list.length(ast_query.wheres) |> should.equal(1)
+}
+
+pub fn self_join_with_aliased_table_test() {
+  // Test a self-join scenario: find users and their managers
+  let managers = alias_table(users(), "managers")
+  let manager_id: Column(UserTable, Int) = aliased_column(managers, "id")
+
+  // Using user_id as the "manager_id" foreign key (simulating user.manager_id = managers.id)
+  let join_condition: query.TypedCondition(Join2(UserTable, UserTable)) =
+    typed_eq_columns(user_id(), manager_id)
+
+  let query =
+    typed_from(users())
+    |> typed_join_aliased(managers, on: join_condition)
+
+  let ast_query = to_ast(query)
+
+  // Verify the self-join was created correctly
+  list.length(ast_query.joins) |> should.equal(1)
+  case ast_query.joins {
+    [ast.Join(_, table_name, alias, _)] -> {
+      table_name |> should.equal("users AS managers")
+      alias |> should.equal(Some("managers"))
     }
     _ -> should.fail()
   }

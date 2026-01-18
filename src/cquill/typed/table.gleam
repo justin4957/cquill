@@ -90,6 +90,78 @@ pub fn table_qualified_name(table: Table(t)) -> String {
 }
 
 // ============================================================================
+// TABLE ALIASING
+// ============================================================================
+
+/// An aliased table reference carrying the original table type.
+/// Used for self-joins and queries that need multiple references to the same table.
+///
+/// ## Example
+/// ```gleam
+/// let managers = alias_table(users, "managers")
+///
+/// typed_from(users)
+/// |> typed_join_aliased(managers, on: ...)
+/// ```
+pub opaque type AliasedTable(table_type) {
+  AliasedTable(table: Table(table_type), alias_name: String)
+}
+
+/// Create an aliased table reference.
+/// This creates a new reference to a table with a different alias,
+/// useful for self-joins or when you need to reference the same table multiple times.
+///
+/// ## Example
+/// ```gleam
+/// // For a self-join to find employees and their managers
+/// let managers = alias_table(employees, "managers")
+/// ```
+pub fn alias_table(table: Table(t), alias_name: String) -> AliasedTable(t) {
+  AliasedTable(table: table, alias_name: alias_name)
+}
+
+/// Get the alias name from an aliased table.
+pub fn aliased_table_alias(aliased: AliasedTable(t)) -> String {
+  let AliasedTable(alias_name: alias, ..) = aliased
+  alias
+}
+
+/// Get the underlying table from an aliased table.
+pub fn aliased_table_table(aliased: AliasedTable(t)) -> Table(t) {
+  let AliasedTable(table: table, ..) = aliased
+  table
+}
+
+/// Get the original table name from an aliased table.
+pub fn aliased_table_name(aliased: AliasedTable(t)) -> String {
+  let AliasedTable(table: table, ..) = aliased
+  table_name(table)
+}
+
+/// Get the qualified name with alias (schema.table AS alias).
+pub fn aliased_table_qualified_name(aliased: AliasedTable(t)) -> String {
+  let AliasedTable(table: table, alias_name: alias) = aliased
+  table_qualified_name(table) <> " AS " <> alias
+}
+
+/// Create a column reference using an aliased table.
+/// The column will be prefixed with the alias in generated SQL.
+///
+/// ## Example
+/// ```gleam
+/// let managers = alias_table(users, "m")
+/// let manager_id = aliased_column(managers, "id")
+/// // Generates: m.id
+/// ```
+pub fn aliased_column(
+  aliased_table: AliasedTable(t),
+  column_name: String,
+) -> Column(t, v) {
+  let AliasedTable(alias_name: alias, ..) = aliased_table
+  Column(name: column_name, table_alias: alias)
+}
+
+// ============================================================================
 // COLUMN TYPE
 // ============================================================================
 
@@ -151,6 +223,19 @@ pub fn column_qualified_name(column: Column(t, v)) -> String {
   }
 }
 
+/// Add or change the table alias for a column.
+/// Returns a new column with the specified alias prefix.
+///
+/// ## Example
+/// ```gleam
+/// let u_email = with_alias(email, "u")
+/// // In SQL: u.email
+/// ```
+pub fn with_alias(column: Column(t, v), alias: String) -> Column(t, v) {
+  let Column(name: name, ..) = column
+  Column(name: name, table_alias: alias)
+}
+
 // ============================================================================
 // JOIN TYPES
 // ============================================================================
@@ -192,6 +277,24 @@ pub fn in_join2_left(column: Column(t1, v)) -> Column(Join2(t1, t2), v) {
 pub fn in_join2_right(column: Column(t2, v)) -> Column(Join2(t1, t2), v) {
   let Column(name: name, table_alias: alias) = column
   Column(name: name, table_alias: alias)
+}
+
+/// Short alias for `in_join2_left`.
+/// Lifts a column from the left table into a Join2 scope.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_join(posts, on: typed_eq_columns(left(user_id), right(post_user_id)))
+/// ```
+pub fn left(column: Column(t1, v)) -> Column(Join2(t1, t2), v) {
+  in_join2_left(column)
+}
+
+/// Short alias for `in_join2_right`.
+/// Lifts a column from the right table into a Join2 scope.
+pub fn right(column: Column(t2, v)) -> Column(Join2(t1, t2), v) {
+  in_join2_right(column)
 }
 
 /// Coerce a column to the first table of a Join3.
