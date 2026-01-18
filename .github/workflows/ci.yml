@@ -189,12 +189,12 @@ jobs:
           # Latest stable
           - gleam: "1.14.0"
             otp: "28"
-          # Previous Gleam version
-          - gleam: "1.13.0"
-            otp: "27"
-          # Older OTP with current Gleam
+          # Current Gleam with previous OTP
           - gleam: "1.14.0"
             otp: "27"
+          # Current Gleam with older OTP
+          - gleam: "1.14.0"
+            otp: "26"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
