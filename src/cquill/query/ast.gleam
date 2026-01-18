@@ -288,3 +288,153 @@ pub fn order_by_asc(field: String) -> OrderBy {
 pub fn order_by_desc(field: String) -> OrderBy {
   OrderBy(field:, direction: Desc, nulls: NullsDefault)
 }
+
+// ============================================================================
+// INSERT QUERY TYPE
+// ============================================================================
+
+/// Represents an INSERT query AST.
+/// The schema parameter provides type safety.
+pub type InsertQuery(schema) {
+  InsertQuery(
+    /// The target table
+    table: String,
+    /// Optional schema name (e.g., "public")
+    schema_name: Option(String),
+    /// Columns to insert into
+    columns: List(String),
+    /// Values to insert (list of rows, each row is a list of values)
+    values: List(List(Value)),
+    /// Conflict handling strategy
+    on_conflict: Option(OnConflict),
+    /// Columns to return after insert
+    returning: List(String),
+  )
+}
+
+/// Conflict handling strategies for INSERT
+pub type OnConflict {
+  /// ON CONFLICT DO NOTHING
+  DoNothing
+  /// ON CONFLICT (columns) DO UPDATE SET ...
+  DoUpdate(conflict_columns: List(String), update_columns: List(String))
+  /// ON CONFLICT ON CONSTRAINT constraint_name DO NOTHING
+  DoNothingOnConstraint(constraint_name: String)
+  /// ON CONFLICT ON CONSTRAINT constraint_name DO UPDATE SET ...
+  DoUpdateOnConstraint(constraint_name: String, update_columns: List(String))
+}
+
+/// Create a new empty InsertQuery AST
+pub fn new_insert(table: String) -> InsertQuery(Nil) {
+  InsertQuery(
+    table: table,
+    schema_name: option.None,
+    columns: [],
+    values: [],
+    on_conflict: option.None,
+    returning: [],
+  )
+}
+
+/// Create a new InsertQuery AST with schema qualification
+pub fn new_insert_qualified(
+  schema_name: String,
+  table: String,
+) -> InsertQuery(Nil) {
+  InsertQuery(
+    table: table,
+    schema_name: option.Some(schema_name),
+    columns: [],
+    values: [],
+    on_conflict: option.None,
+    returning: [],
+  )
+}
+
+// ============================================================================
+// UPDATE QUERY TYPE
+// ============================================================================
+
+/// Represents an UPDATE query AST.
+/// The schema parameter provides type safety.
+pub type UpdateQuery(schema) {
+  UpdateQuery(
+    /// The target table
+    table: String,
+    /// Optional schema name
+    schema_name: Option(String),
+    /// SET clauses: list of (column, value) pairs
+    sets: List(SetClause),
+    /// WHERE conditions
+    wheres: List(Where),
+    /// Columns to return after update
+    returning: List(String),
+  )
+}
+
+/// A SET clause in an UPDATE query
+pub type SetClause {
+  SetClause(column: String, value: Value)
+}
+
+/// Create a new empty UpdateQuery AST
+pub fn new_update(table: String) -> UpdateQuery(Nil) {
+  UpdateQuery(
+    table: table,
+    schema_name: option.None,
+    sets: [],
+    wheres: [],
+    returning: [],
+  )
+}
+
+/// Create a new UpdateQuery AST with schema qualification
+pub fn new_update_qualified(
+  schema_name: String,
+  table: String,
+) -> UpdateQuery(Nil) {
+  UpdateQuery(
+    table: table,
+    schema_name: option.Some(schema_name),
+    sets: [],
+    wheres: [],
+    returning: [],
+  )
+}
+
+// ============================================================================
+// DELETE QUERY TYPE
+// ============================================================================
+
+/// Represents a DELETE query AST.
+/// The schema parameter provides type safety.
+pub type DeleteQuery(schema) {
+  DeleteQuery(
+    /// The target table
+    table: String,
+    /// Optional schema name
+    schema_name: Option(String),
+    /// WHERE conditions
+    wheres: List(Where),
+    /// Columns to return after delete
+    returning: List(String),
+  )
+}
+
+/// Create a new empty DeleteQuery AST
+pub fn new_delete(table: String) -> DeleteQuery(Nil) {
+  DeleteQuery(table: table, schema_name: option.None, wheres: [], returning: [])
+}
+
+/// Create a new DeleteQuery AST with schema qualification
+pub fn new_delete_qualified(
+  schema_name: String,
+  table: String,
+) -> DeleteQuery(Nil) {
+  DeleteQuery(
+    table: table,
+    schema_name: option.Some(schema_name),
+    wheres: [],
+    returning: [],
+  )
+}
