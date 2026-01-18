@@ -17,9 +17,9 @@ import cquill/query/ast.{
   type Condition, type Direction, type Join, type JoinType, type NullsOrder,
   type OrderBy, type Query, type Select, type SelectExpression, type Source,
   type Value, type Where, And, Asc, Between, BoolValue, CrossJoin, Desc, Eq,
-  FloatValue, FullJoin, Gt, Gte, In, InnerJoin, IntValue, IsNotNull, IsNull,
-  Join as JoinClause, LeftJoin, Like, ListValue, Lt, Lte, Not, NotEq, NotIn,
-  NotLike, NullValue, NullsDefault, NullsFirst, NullsLast, Or,
+  FloatValue, FullJoin, Gt, Gte, ILike, In, InnerJoin, IntValue, IsNotNull,
+  IsNull, Join as JoinClause, LeftJoin, Like, ListValue, Lt, Lte, Not, NotEq,
+  NotILike, NotIn, NotLike, NullValue, NullsDefault, NullsFirst, NullsLast, Or,
   OrderBy as OrderByClause, Query as QueryRecord, Raw, RightJoin, SelectAll,
   SelectExpr, SelectFields, StringValue, SubquerySource, TableSource,
   Where as WhereClause,
@@ -760,6 +760,8 @@ fn condition_to_string(cond: Condition) -> String {
       <> ")"
     Like(field, pattern) -> field <> " LIKE '" <> pattern <> "'"
     NotLike(field, pattern) -> field <> " NOT LIKE '" <> pattern <> "'"
+    ILike(field, pattern) -> field <> " ILIKE '" <> pattern <> "'"
+    NotILike(field, pattern) -> field <> " NOT ILIKE '" <> pattern <> "'"
     IsNull(field) -> field <> " IS NULL"
     IsNotNull(field) -> field <> " IS NOT NULL"
     Between(field, low, high) ->

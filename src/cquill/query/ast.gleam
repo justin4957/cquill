@@ -141,6 +141,10 @@ pub type Condition {
   Like(field: String, pattern: String)
   /// field NOT LIKE pattern
   NotLike(field: String, pattern: String)
+  /// field ILIKE pattern (case-insensitive LIKE)
+  ILike(field: String, pattern: String)
+  /// field NOT ILIKE pattern
+  NotILike(field: String, pattern: String)
   /// field IS NULL
   IsNull(field: String)
   /// field IS NOT NULL

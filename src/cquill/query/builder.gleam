@@ -363,6 +363,8 @@ fn extract_fields_from_condition(condition: Condition) -> List(String) {
     ast.NotIn(field, _) -> [field]
     ast.Like(field, _) -> [field]
     ast.NotLike(field, _) -> [field]
+    ast.ILike(field, _) -> [field]
+    ast.NotILike(field, _) -> [field]
     ast.IsNull(field) -> [field]
     ast.IsNotNull(field) -> [field]
     ast.Between(field, _, _) -> [field]

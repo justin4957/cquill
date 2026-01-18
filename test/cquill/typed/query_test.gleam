@@ -6,14 +6,16 @@
 import cquill/query/ast
 import cquill/typed/query.{
   condition_to_ast, to_ast, typed_and, typed_between, typed_column_eq,
-  typed_distinct, typed_eq, typed_from, typed_get_limit, typed_get_offset,
-  typed_group_by, typed_gt, typed_gte, typed_has_conditions, typed_has_order_by,
-  typed_has_pagination, typed_having, typed_in, typed_is_distinct,
+  typed_contains, typed_distinct, typed_ends_with, typed_eq, typed_eq_columns,
+  typed_from, typed_get_limit, typed_get_offset, typed_group_by, typed_gt,
+  typed_gt_columns, typed_gte, typed_has_conditions, typed_has_order_by,
+  typed_has_pagination, typed_having, typed_ilike, typed_in, typed_is_distinct,
   typed_is_not_null, typed_is_null, typed_join, typed_left_join, typed_like,
-  typed_limit, typed_lt, typed_lte, typed_not, typed_not_eq, typed_not_in,
-  typed_not_like, typed_offset, typed_or, typed_or_where, typed_order_by_asc,
+  typed_limit, typed_lt, typed_lt_columns, typed_lte, typed_not, typed_not_eq,
+  typed_not_eq_columns, typed_not_ilike, typed_not_in, typed_not_like,
+  typed_offset, typed_or, typed_or_where, typed_order_by_asc,
   typed_order_by_clear, typed_order_by_desc, typed_paginate, typed_select,
-  typed_select_all, typed_where, typed_where_clear,
+  typed_select_all, typed_starts_with, typed_where, typed_where_clear,
 }
 import cquill/typed/table.{
   type Column, type Join2, type Table, column, in_join2_left, in_join2_right,
@@ -656,4 +658,173 @@ pub fn joined_query_uses_columns_from_both_tables_test() {
   let ast_query = to_ast(query)
   list.length(ast_query.joins)
   |> should.equal(1)
+}
+
+// ============================================================================
+// STRING CONDITION BUILDER TESTS (Issue #25)
+// ============================================================================
+
+pub fn typed_ilike_creates_case_insensitive_like_condition_test() {
+  let condition = typed_ilike(user_email(), "%@EXAMPLE.COM")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.ILike(field, pattern) -> {
+      field |> should.equal("email")
+      pattern |> should.equal("%@EXAMPLE.COM")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_not_ilike_creates_not_ilike_condition_test() {
+  let condition = typed_not_ilike(user_email(), "%spam%")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.NotILike(field, pattern) -> {
+      field |> should.equal("email")
+      pattern |> should.equal("%spam%")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_starts_with_creates_like_prefix_condition_test() {
+  let condition = typed_starts_with(user_email(), "admin")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Like(field, pattern) -> {
+      field |> should.equal("email")
+      pattern |> should.equal("admin%")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_ends_with_creates_like_suffix_condition_test() {
+  let condition = typed_ends_with(user_email(), "@example.com")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Like(field, pattern) -> {
+      field |> should.equal("email")
+      pattern |> should.equal("%@example.com")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_contains_creates_like_substring_condition_test() {
+  let condition = typed_contains(user_email(), "admin")
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Like(field, pattern) -> {
+      field |> should.equal("email")
+      pattern |> should.equal("%admin%")
+    }
+    _ -> should.fail()
+  }
+}
+
+// ============================================================================
+// CROSS-TABLE COLUMN COMPARISON TESTS (Issue #25)
+// ============================================================================
+
+pub fn typed_eq_columns_creates_cross_table_equality_test() {
+  // This creates a Join2 scoped condition for comparing columns from different tables
+  let condition: query.TypedCondition(Join2(PostTable, UserTable)) =
+    typed_eq_columns(post_user_id(), user_id())
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Raw(sql, params) -> {
+      sql |> should.equal("user_id = id")
+      list.length(params) |> should.equal(0)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_not_eq_columns_creates_cross_table_inequality_test() {
+  let condition: query.TypedCondition(Join2(PostTable, UserTable)) =
+    typed_not_eq_columns(post_user_id(), user_id())
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Raw(sql, params) -> {
+      sql |> should.equal("user_id != id")
+      list.length(params) |> should.equal(0)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_gt_columns_creates_cross_table_greater_than_test() {
+  let condition: query.TypedCondition(Join2(PostTable, UserTable)) =
+    typed_gt_columns(post_user_id(), user_id())
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Raw(sql, params) -> {
+      sql |> should.equal("user_id > id")
+      list.length(params) |> should.equal(0)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn typed_lt_columns_creates_cross_table_less_than_test() {
+  let condition: query.TypedCondition(Join2(PostTable, UserTable)) =
+    typed_lt_columns(post_user_id(), user_id())
+  let ast_cond = condition_to_ast(condition)
+
+  case ast_cond {
+    ast.Raw(sql, params) -> {
+      sql |> should.equal("user_id < id")
+      list.length(params) |> should.equal(0)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn string_conditions_work_in_query_pipeline_test() {
+  // Test that string conditions can be used in full query pipelines
+  let query =
+    typed_from(users())
+    |> typed_where(typed_starts_with(user_email(), "admin"))
+    |> typed_where(typed_ends_with(user_email(), "@example.com"))
+    |> typed_where(typed_contains(user_email(), "test"))
+    |> typed_where(typed_ilike(user_email(), "%SUPPORT%"))
+
+  typed_has_conditions(query)
+  |> should.be_true
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.wheres)
+  |> should.equal(4)
+}
+
+pub fn cross_table_column_comparison_in_join_condition_test() {
+  // Test using typed_eq_columns in an actual join
+  let join_condition: query.TypedCondition(Join2(UserTable, PostTable)) =
+    typed_eq_columns(user_id(), post_user_id())
+
+  let query =
+    typed_from(users())
+    |> typed_join(posts(), on: join_condition)
+
+  let ast_query = to_ast(query)
+  list.length(ast_query.joins)
+  |> should.equal(1)
+
+  case ast_query.joins {
+    [ast.Join(join_type, table_name, _, _)] -> {
+      join_type |> should.equal(ast.InnerJoin)
+      table_name |> should.equal("posts")
+    }
+    _ -> should.fail()
+  }
 }
