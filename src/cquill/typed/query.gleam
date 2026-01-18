@@ -292,6 +292,88 @@ pub fn typed_not_like(
   ))
 }
 
+/// Create a case-insensitive LIKE condition: column ILIKE pattern
+/// Only works with String columns.
+///
+/// ## Example
+/// ```gleam
+/// typed_ilike(email, "%@EXAMPLE.COM")  // Matches case-insensitively
+/// ```
+pub fn typed_ilike(
+  column: Column(t, String),
+  pattern: String,
+) -> TypedCondition(t) {
+  TypedCondition(inner: ast.ILike(
+    field: column_qualified_name(column),
+    pattern: pattern,
+  ))
+}
+
+/// Create a NOT ILIKE condition: column NOT ILIKE pattern
+pub fn typed_not_ilike(
+  column: Column(t, String),
+  pattern: String,
+) -> TypedCondition(t) {
+  TypedCondition(inner: ast.NotILike(
+    field: column_qualified_name(column),
+    pattern: pattern,
+  ))
+}
+
+/// Create a starts_with condition: column LIKE 'prefix%'
+/// Convenience wrapper that generates the LIKE pattern automatically.
+/// Only works with String columns.
+///
+/// ## Example
+/// ```gleam
+/// typed_starts_with(name, "John")  // LIKE 'John%'
+/// ```
+pub fn typed_starts_with(
+  column: Column(t, String),
+  prefix: String,
+) -> TypedCondition(t) {
+  TypedCondition(inner: ast.Like(
+    field: column_qualified_name(column),
+    pattern: prefix <> "%",
+  ))
+}
+
+/// Create an ends_with condition: column LIKE '%suffix'
+/// Convenience wrapper that generates the LIKE pattern automatically.
+/// Only works with String columns.
+///
+/// ## Example
+/// ```gleam
+/// typed_ends_with(email, "@example.com")  // LIKE '%@example.com'
+/// ```
+pub fn typed_ends_with(
+  column: Column(t, String),
+  suffix: String,
+) -> TypedCondition(t) {
+  TypedCondition(inner: ast.Like(
+    field: column_qualified_name(column),
+    pattern: "%" <> suffix,
+  ))
+}
+
+/// Create a contains condition: column LIKE '%substring%'
+/// Convenience wrapper that generates the LIKE pattern automatically.
+/// Only works with String columns.
+///
+/// ## Example
+/// ```gleam
+/// typed_contains(description, "important")  // LIKE '%important%'
+/// ```
+pub fn typed_contains(
+  column: Column(t, String),
+  substring: String,
+) -> TypedCondition(t) {
+  TypedCondition(inner: ast.Like(
+    field: column_qualified_name(column),
+    pattern: "%" <> substring <> "%",
+  ))
+}
+
 /// Create an IS NULL condition.
 /// Only works with Option columns.
 pub fn typed_is_null(column: Column(t, Option(v))) -> TypedCondition(t) {
@@ -598,6 +680,128 @@ pub fn typed_column_lt(
   TypedCondition(
     inner: ast.Raw(
       sql: column_qualified_name(left) <> " < " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a condition comparing two columns with greater-than-or-equal.
+pub fn typed_column_gte(
+  left: Column(t, v),
+  right: Column(t, v),
+) -> TypedCondition(t) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " >= " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a condition comparing two columns with less-than-or-equal.
+pub fn typed_column_lte(
+  left: Column(t, v),
+  right: Column(t, v),
+) -> TypedCondition(t) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " <= " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+// ============================================================================
+// CROSS-TABLE COLUMN COMPARISONS
+// ============================================================================
+
+/// Create an equality condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope, suitable for join conditions.
+/// Both columns must have the same value type.
+///
+/// ## Example
+/// ```gleam
+/// // In a join between users and posts tables:
+/// typed_eq_columns(posts_user_id, users_id)
+/// // Returns: TypedCondition(Join2(PostTable, UserTable))
+/// ```
+pub fn typed_eq_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " = " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a not-equal condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope.
+pub fn typed_not_eq_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " != " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a greater-than condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope.
+pub fn typed_gt_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " > " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a less-than condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope.
+pub fn typed_lt_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " < " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a greater-than-or-equal condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope.
+pub fn typed_gte_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " >= " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a less-than-or-equal condition comparing columns from two different tables.
+/// Returns a condition with Join2 scope.
+pub fn typed_lte_columns(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " <= " <> column_qualified_name(right),
       params: [],
     ),
   )
