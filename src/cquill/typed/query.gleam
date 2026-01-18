@@ -22,7 +22,8 @@
 
 import cquill/query/ast
 import cquill/typed/table.{
-  type Column, type Join2, type Join3, type Table, column_name,
+  type AliasedTable, type Column, type Join2, type Join3, type Table,
+  aliased_table_alias, aliased_table_qualified_name, column_name,
   column_qualified_name, table_name, table_qualified_name, table_schema_name,
 }
 import gleam/list
@@ -620,6 +621,200 @@ pub fn typed_join3(
     )
   let new_joins = list.append(inner.joins, [new_join])
   TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+/// Add a CROSS JOIN to the query.
+/// Cross joins produce a Cartesian product and don't require a condition.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(sizes)
+/// |> typed_cross_join(colors)
+/// // Produces all size/color combinations
+/// ```
+pub fn typed_cross_join(
+  query: TypedQuery(t1),
+  table: Table(t2),
+) -> TypedQuery(Join2(t1, t2)) {
+  let TypedQuery(inner: inner) = query
+  // For cross join, we use a true condition since there's no ON clause
+  let new_join =
+    ast.Join(
+      join_type: ast.CrossJoin,
+      table: table_qualified_name(table),
+      table_alias: None,
+      on: ast.Raw(sql: "1=1", params: []),
+    )
+  let new_joins = list.append(inner.joins, [new_join])
+  TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+// ============================================================================
+// ALIASED JOINS
+// ============================================================================
+
+/// Add an INNER JOIN with an aliased table.
+/// Useful for self-joins where the same table needs different aliases.
+///
+/// ## Example
+/// ```gleam
+/// let managers = alias_table(employees, "m")
+///
+/// typed_from(employees)
+/// |> typed_join_aliased(managers, on: join_condition)
+/// ```
+pub fn typed_join_aliased(
+  query: TypedQuery(t1),
+  aliased: AliasedTable(t2),
+  on condition: TypedCondition(Join2(t1, t2)),
+) -> TypedQuery(Join2(t1, t2)) {
+  let TypedQuery(inner: inner) = query
+  let TypedCondition(inner: cond) = condition
+  let new_join =
+    ast.Join(
+      join_type: ast.InnerJoin,
+      table: aliased_table_qualified_name(aliased),
+      table_alias: Some(aliased_table_alias(aliased)),
+      on: cond,
+    )
+  let new_joins = list.append(inner.joins, [new_join])
+  TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+/// Add a LEFT JOIN with an aliased table.
+pub fn typed_left_join_aliased(
+  query: TypedQuery(t1),
+  aliased: AliasedTable(t2),
+  on condition: TypedCondition(Join2(t1, t2)),
+) -> TypedQuery(Join2(t1, t2)) {
+  let TypedQuery(inner: inner) = query
+  let TypedCondition(inner: cond) = condition
+  let new_join =
+    ast.Join(
+      join_type: ast.LeftJoin,
+      table: aliased_table_qualified_name(aliased),
+      table_alias: Some(aliased_table_alias(aliased)),
+      on: cond,
+    )
+  let new_joins = list.append(inner.joins, [new_join])
+  TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+/// Add a RIGHT JOIN with an aliased table.
+pub fn typed_right_join_aliased(
+  query: TypedQuery(t1),
+  aliased: AliasedTable(t2),
+  on condition: TypedCondition(Join2(t1, t2)),
+) -> TypedQuery(Join2(t1, t2)) {
+  let TypedQuery(inner: inner) = query
+  let TypedCondition(inner: cond) = condition
+  let new_join =
+    ast.Join(
+      join_type: ast.RightJoin,
+      table: aliased_table_qualified_name(aliased),
+      table_alias: Some(aliased_table_alias(aliased)),
+      on: cond,
+    )
+  let new_joins = list.append(inner.joins, [new_join])
+  TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+/// Add a CROSS JOIN with an aliased table.
+pub fn typed_cross_join_aliased(
+  query: TypedQuery(t1),
+  aliased: AliasedTable(t2),
+) -> TypedQuery(Join2(t1, t2)) {
+  let TypedQuery(inner: inner) = query
+  let new_join =
+    ast.Join(
+      join_type: ast.CrossJoin,
+      table: aliased_table_qualified_name(aliased),
+      table_alias: Some(aliased_table_alias(aliased)),
+      on: ast.Raw(sql: "1=1", params: []),
+    )
+  let new_joins = list.append(inner.joins, [new_join])
+  TypedQuery(inner: ast.Query(..inner, joins: new_joins))
+}
+
+// ============================================================================
+// JOIN CONDITION HELPERS
+// ============================================================================
+
+/// Create a simple join condition comparing columns from two different tables.
+/// This is a convenience wrapper around `typed_eq_columns` for join conditions.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_join(posts, on: on(user_id, post_user_id))
+/// ```
+pub fn on(
+  left: Column(t1, v),
+  right: Column(t2, v),
+) -> TypedCondition(Join2(t1, t2)) {
+  TypedCondition(
+    inner: ast.Raw(
+      sql: column_qualified_name(left) <> " = " <> column_qualified_name(right),
+      params: [],
+    ),
+  )
+}
+
+/// Create a join condition with an additional condition.
+/// The primary comparison is ANDed with the additional condition.
+///
+/// ## Example
+/// ```gleam
+/// typed_from(users)
+/// |> typed_join(posts, on: on_and(
+///     user_id, post_user_id,
+///     typed_eq(in_join2_right(post_published), True)
+///   ))
+/// ```
+pub fn on_and(
+  left: Column(t1, v),
+  right: Column(t2, v),
+  additional: TypedCondition(Join2(t1, t2)),
+) -> TypedCondition(Join2(t1, t2)) {
+  let TypedCondition(inner: add_cond) = additional
+  TypedCondition(
+    inner: ast.And([
+      ast.Raw(
+        sql: column_qualified_name(left)
+          <> " = "
+          <> column_qualified_name(right),
+        params: [],
+      ),
+      add_cond,
+    ]),
+  )
+}
+
+/// Create a join condition with multiple additional conditions.
+///
+/// ## Example
+/// ```gleam
+/// on_and_all(user_id, post_user_id, [
+///   typed_eq(in_join2_right(post_published), True),
+///   typed_gt(in_join2_right(post_views), 100),
+/// ])
+/// ```
+pub fn on_and_all(
+  left: Column(t1, v),
+  right: Column(t2, v),
+  additional: List(TypedCondition(Join2(t1, t2))),
+) -> TypedCondition(Join2(t1, t2)) {
+  let base_cond =
+    ast.Raw(
+      sql: column_qualified_name(left) <> " = " <> column_qualified_name(right),
+      params: [],
+    )
+  let add_conditions =
+    list.map(additional, fn(c) {
+      let TypedCondition(inner: inner) = c
+      inner
+    })
+  TypedCondition(inner: ast.And([base_cond, ..add_conditions]))
 }
 
 // ============================================================================
