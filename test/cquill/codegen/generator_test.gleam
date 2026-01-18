@@ -6,8 +6,9 @@
 import cquill/codegen/generator.{
   type GeneratedModule, type GeneratorConfig, GeneratedModule, GeneratorConfig,
   default_config, generate_all, generate_enum_module, generate_index_module,
-  generate_schema_module, module_file_path, pascal_case, snake_case,
-  with_module_prefix, with_timestamp_fields,
+  generate_schema_module, generate_typed_index_module, generate_typed_module,
+  module_file_path, pascal_case, snake_case, with_module_prefix,
+  with_timestamp_fields, with_typed_columns,
 }
 import cquill/introspection.{
   type IntrospectedEnum, type IntrospectedTable, IntrospectedColumn,
@@ -420,6 +421,7 @@ pub fn generate_schema_module_respects_generate_decoders_false_test() {
       timestamp_fields: ["inserted_at", "updated_at"],
       generate_decoders: False,
       generate_encoders: True,
+      generate_typed: True,
     )
 
   let module = generate_schema_module(table, [], config)
@@ -438,6 +440,7 @@ pub fn generate_schema_module_respects_generate_encoders_false_test() {
       timestamp_fields: ["inserted_at", "updated_at"],
       generate_decoders: True,
       generate_encoders: False,
+      generate_typed: True,
     )
 
   let module = generate_schema_module(table, [], config)
@@ -671,7 +674,9 @@ pub fn generate_index_module_no_enum_import_when_empty_test() {
 pub fn generate_all_creates_all_modules_test() {
   let tables = [make_user_table(), make_posts_table()]
   let enums = [make_post_status_enum()]
-  let config = default_config()
+  let config =
+    default_config()
+    |> with_typed_columns(False)
 
   let modules = generate_all(tables, enums, config)
 
@@ -726,7 +731,9 @@ pub fn generate_all_includes_index_module_test() {
 pub fn generate_all_skips_enum_module_when_no_enums_test() {
   let tables = [make_user_table()]
   let enums = []
-  let config = default_config()
+  let config =
+    default_config()
+    |> with_typed_columns(False)
 
   let modules = generate_all(tables, enums, config)
   let paths = list.map(modules, fn(m) { m.path })
@@ -956,4 +963,334 @@ pub fn generate_schema_module_handles_all_nullable_columns_test() {
   module.content
   |> string.contains("value: Option(String),")
   |> should.be_true
+}
+
+// ============================================================================
+// TYPED COLUMN GENERATION TESTS
+// ============================================================================
+
+pub fn generate_typed_module_creates_correct_path_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.path
+  |> should.equal("db/typed/users")
+
+  module.filename
+  |> should.equal("users.gleam")
+}
+
+pub fn generate_typed_module_includes_header_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.content
+  |> string.contains("// users.gleam (GENERATED)")
+  |> should.be_true
+
+  module.content
+  |> string.contains("DO NOT EDIT")
+  |> should.be_true
+
+  module.content
+  |> string.contains("Typed columns for users table")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_imports_table_and_column_types_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.content
+  |> string.contains(
+    "import cquill/typed/table.{type Table, type Column, table, column}",
+  )
+  |> should.be_true
+}
+
+pub fn generate_typed_module_imports_option_for_nullable_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  // name column is nullable, so Option should be imported
+  module.content
+  |> string.contains("import gleam/option.{type Option}")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_generates_phantom_type_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.content
+  |> string.contains("pub type UsersTable")
+  |> should.be_true
+
+  module.content
+  |> string.contains("/// Phantom type for UsersTable table")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_generates_table_function_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.content
+  |> string.contains("pub fn users() -> Table(UsersTable)")
+  |> should.be_true
+
+  module.content
+  |> string.contains("table(\"users\")")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_generates_column_functions_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  // id column - Int type
+  module.content
+  |> string.contains("pub fn id() -> Column(UsersTable, Int)")
+  |> should.be_true
+
+  module.content
+  |> string.contains("column(\"id\")")
+  |> should.be_true
+
+  // email column - String type
+  module.content
+  |> string.contains("pub fn email() -> Column(UsersTable, String)")
+  |> should.be_true
+
+  module.content
+  |> string.contains("column(\"email\")")
+  |> should.be_true
+
+  // name column - Option(String) type (nullable)
+  module.content
+  |> string.contains("pub fn name() -> Column(UsersTable, Option(String))")
+  |> should.be_true
+
+  module.content
+  |> string.contains("column(\"name\")")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_includes_column_comments_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  module.content
+  |> string.contains("/// Column: id")
+  |> should.be_true
+
+  module.content
+  |> string.contains("/// Column: email")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_respects_module_prefix_test() {
+  let table = make_user_table()
+  let config =
+    default_config()
+    |> with_module_prefix("myapp/database")
+
+  let module = generate_typed_module(table, [], config)
+
+  module.path
+  |> should.equal("myapp/database/typed/users")
+}
+
+pub fn generate_typed_module_handles_timestamp_columns_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  // inserted_at column should be Time type
+  module.content
+  |> string.contains("pub fn inserted_at() -> Column(UsersTable, Time)")
+  |> should.be_true
+}
+
+pub fn generate_typed_module_imports_birl_for_time_test() {
+  let table = make_user_table()
+  let config = default_config()
+
+  let module = generate_typed_module(table, [], config)
+
+  // inserted_at is a timestamp, so birl should be imported
+  module.content
+  |> string.contains("import birl.{type Time}")
+  |> should.be_true
+}
+
+// ============================================================================
+// TYPED INDEX MODULE TESTS
+// ============================================================================
+
+pub fn generate_typed_index_module_creates_correct_path_test() {
+  let tables = [make_user_table()]
+  let config = default_config()
+
+  let module = generate_typed_index_module(tables, config)
+
+  module.path
+  |> should.equal("db/typed")
+
+  module.filename
+  |> should.equal("typed.gleam")
+}
+
+pub fn generate_typed_index_module_includes_header_test() {
+  let tables = [make_user_table()]
+  let config = default_config()
+
+  let module = generate_typed_index_module(tables, config)
+
+  module.content
+  |> string.contains("// typed.gleam (GENERATED)")
+  |> should.be_true
+
+  module.content
+  |> string.contains("DO NOT EDIT")
+  |> should.be_true
+}
+
+pub fn generate_typed_index_module_imports_typed_table_modules_test() {
+  let tables = [make_user_table(), make_posts_table()]
+  let config = default_config()
+
+  let module = generate_typed_index_module(tables, config)
+
+  module.content
+  |> string.contains("import db/typed/users")
+  |> should.be_true
+
+  module.content
+  |> string.contains("import db/typed/posts")
+  |> should.be_true
+}
+
+// ============================================================================
+// TYPED GENERATION CONFIG TESTS
+// ============================================================================
+
+pub fn with_typed_columns_enables_typed_generation_test() {
+  let config =
+    default_config()
+    |> with_typed_columns(True)
+
+  config.generate_typed
+  |> should.be_true
+}
+
+pub fn with_typed_columns_disables_typed_generation_test() {
+  let config =
+    default_config()
+    |> with_typed_columns(False)
+
+  config.generate_typed
+  |> should.be_false
+}
+
+pub fn default_config_enables_typed_generation_test() {
+  let config = default_config()
+
+  config.generate_typed
+  |> should.be_true
+}
+
+// ============================================================================
+// GENERATE ALL WITH TYPED TESTS
+// ============================================================================
+
+pub fn generate_all_includes_typed_modules_by_default_test() {
+  let tables = [make_user_table(), make_posts_table()]
+  let enums = []
+  let config = default_config()
+
+  let modules = generate_all(tables, enums, config)
+  let paths = list.map(modules, fn(m) { m.path })
+
+  // Should include typed modules
+  paths
+  |> list.contains("db/typed/users")
+  |> should.be_true
+
+  paths
+  |> list.contains("db/typed/posts")
+  |> should.be_true
+
+  paths
+  |> list.contains("db/typed")
+  |> should.be_true
+}
+
+pub fn generate_all_with_typed_creates_correct_count_test() {
+  let tables = [make_user_table(), make_posts_table()]
+  let enums = []
+  let config = default_config()
+
+  let modules = generate_all(tables, enums, config)
+
+  // Should have: 2 table modules + 1 index module + 2 typed table modules + 1 typed index = 6
+  list.length(modules)
+  |> should.equal(6)
+}
+
+pub fn generate_all_skips_typed_modules_when_disabled_test() {
+  let tables = [make_user_table(), make_posts_table()]
+  let enums = []
+  let config =
+    default_config()
+    |> with_typed_columns(False)
+
+  let modules = generate_all(tables, enums, config)
+  let paths = list.map(modules, fn(m) { m.path })
+
+  // Should NOT include typed modules
+  paths
+  |> list.contains("db/typed/users")
+  |> should.be_false
+
+  paths
+  |> list.contains("db/typed/posts")
+  |> should.be_false
+
+  paths
+  |> list.contains("db/typed")
+  |> should.be_false
+
+  // Should have: 2 table modules + 1 index module = 3
+  list.length(modules)
+  |> should.equal(3)
+}
+
+pub fn generate_all_with_enums_and_typed_creates_all_modules_test() {
+  let tables = [make_user_table(), make_posts_table()]
+  let enums = [make_post_status_enum()]
+  let config = default_config()
+
+  let modules = generate_all(tables, enums, config)
+
+  // Should have: 2 table modules + 1 enum module + 1 index module + 2 typed table modules + 1 typed index = 7
+  list.length(modules)
+  |> should.equal(7)
 }

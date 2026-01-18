@@ -298,6 +298,55 @@ pub fn parse_generate_format_defaults_to_true_test() {
   }
 }
 
+pub fn parse_generate_typed_defaults_to_true_test() {
+  let result =
+    parse(["generate", "--database-url", "postgres://localhost/mydb"])
+
+  case result {
+    Ok(Generate(opts)) -> {
+      opts.typed
+      |> should.be_true
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_with_typed_flag_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--typed",
+    ])
+
+  case result {
+    Ok(Generate(opts)) -> {
+      opts.typed
+      |> should.be_true
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_with_no_typed_flag_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--no-typed",
+    ])
+
+  case result {
+    Ok(Generate(opts)) -> {
+      opts.typed
+      |> should.be_false
+    }
+    _ -> should.fail()
+  }
+}
+
 pub fn parse_generate_with_multiple_options_test() {
   let result =
     parse([
@@ -412,6 +461,9 @@ pub fn default_generate_options_has_correct_defaults_test() {
 
   opts.verbose
   |> should.be_false
+
+  opts.typed
+  |> should.be_true
 }
 
 // ============================================================================

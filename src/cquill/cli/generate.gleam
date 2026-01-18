@@ -517,6 +517,7 @@ fn generate_code(
   let config =
     generator.default_config()
     |> generator.with_module_prefix(options.prefix)
+    |> generator.with_typed_columns(options.typed)
 
   let modules = generator.generate_all(schema.tables, schema.enums, config)
 
