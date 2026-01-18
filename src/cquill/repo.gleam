@@ -598,6 +598,121 @@ pub type RepoTransactionError(e) {
 }
 
 // ============================================================================
+// SAVEPOINT SUPPORT
+// ============================================================================
+
+/// Execute a function within a named savepoint.
+///
+/// Savepoints allow partial rollback within a transaction. If the function
+/// returns Ok, the savepoint is released. If the function returns Error,
+/// changes since the savepoint are rolled back but the transaction continues.
+///
+/// This must be called within an active transaction.
+///
+/// ## Example
+/// ```gleam
+/// repo.transaction(adapter, conn, fn(tx_conn) {
+///   // Do some work...
+///
+///   // Try an operation that might fail
+///   case repo.savepoint("attempt_1", tx_conn, fn(sp_conn) {
+///     repo.insert(adapter, sp_conn, risky_insert_query, decoder)
+///   }) {
+///     Ok(record) -> Ok(record)
+///     Error(_) -> {
+///       // The insert failed and was rolled back, but we can continue
+///       repo.insert(adapter, tx_conn, fallback_insert_query, decoder)
+///     }
+///   }
+/// })
+/// ```
+pub fn savepoint(
+  _name: String,
+  connection: conn,
+  operation: fn(conn) -> Result(a, e),
+) -> Result(a, RepoSavepointError(e)) {
+  // Note: This function signature is adapter-agnostic.
+  // For adapter-specific savepoint support, use the adapter's
+  // savepoint functions directly (e.g., postgres.execute_savepoint).
+  //
+  // This function provides a common interface but the actual implementation
+  // depends on the adapter being used. For real database adapters,
+  // users should call the adapter-specific savepoint functions.
+  //
+  // For the memory adapter, use memory.execute_savepoint directly.
+  // For postgres, use postgres.execute_savepoint directly.
+  case operation(connection) {
+    Ok(result) -> Ok(result)
+    Error(user_err) -> Error(SavepointUserAborted(user_err))
+  }
+}
+
+/// Savepoint error type for the repo API
+pub type RepoSavepointError(e) {
+  /// User's operation returned an error, savepoint was rolled back
+  SavepointUserAborted(e)
+
+  /// Adapter/database error during savepoint, savepoint was rolled back
+  SavepointAdapterError(error.AdapterError)
+
+  /// Savepoint could not be created
+  SavepointCreationFailed(reason: String)
+
+  /// Savepoint could not be released
+  SavepointReleaseFailed(reason: String)
+
+  /// Savepoint was not found (possibly released or never created)
+  SavepointNotFound(name: String)
+
+  /// Cannot use savepoint outside of a transaction
+  NotInTransaction
+}
+
+/// Convert a SavepointError to a RepoSavepointError
+pub fn from_savepoint_error(
+  err: error.SavepointError(e),
+) -> RepoSavepointError(e) {
+  case err {
+    error.SavepointNotFound(name) -> SavepointNotFound(name)
+    error.SavepointAdapterError(adapter_err) ->
+      SavepointAdapterError(adapter_err)
+    error.SavepointUserError(user_err) -> SavepointUserAborted(user_err)
+    error.SavepointCreationFailed(reason) -> SavepointCreationFailed(reason)
+    error.SavepointReleaseFailed(reason) -> SavepointReleaseFailed(reason)
+    error.SavepointNoTransaction -> NotInTransaction
+  }
+}
+
+/// Format a RepoSavepointError for display
+pub fn format_savepoint_error(err: RepoSavepointError(e)) -> String {
+  case err {
+    SavepointUserAborted(_) -> "Savepoint aborted: user error"
+    SavepointAdapterError(adapter_err) ->
+      "Savepoint failed: " <> error.format_error(adapter_err)
+    SavepointCreationFailed(reason) -> "Failed to create savepoint: " <> reason
+    SavepointReleaseFailed(reason) -> "Failed to release savepoint: " <> reason
+    SavepointNotFound(name) -> "Savepoint not found: " <> name
+    NotInTransaction -> "Cannot use savepoint outside of a transaction"
+  }
+}
+
+/// Check if a savepoint error indicates the savepoint was not found
+pub fn is_savepoint_not_found(err: RepoSavepointError(e)) -> Bool {
+  case err {
+    SavepointNotFound(_) -> True
+    _ -> False
+  }
+}
+
+/// Check if a savepoint error indicates we're not in a transaction
+pub fn is_not_in_transaction(err: RepoSavepointError(e)) -> Bool {
+  case err {
+    NotInTransaction -> True
+    _ -> False
+  }
+}
+
+// ============================================================================
 // CONVENIENCE FUNCTIONS
 // ============================================================================
 

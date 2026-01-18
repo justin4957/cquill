@@ -603,6 +603,218 @@ pub fn execute_transaction_with_user_error(
 }
 
 // ============================================================================
+// SAVEPOINT SUPPORT
+// ============================================================================
+
+/// Create a savepoint with the given name.
+/// Savepoints allow partial rollback within a transaction.
+/// The connection must be within an active transaction.
+pub fn create_savepoint(
+  conn: PostgresConnection,
+  name: String,
+) -> Result(Nil, error.SavepointError(Nil)) {
+  let sql = "SAVEPOINT " <> escape_identifier(name)
+  case execute_sql_mutation(conn, sql, []) {
+    Ok(_) -> Ok(Nil)
+    Error(adapter_err) ->
+      Error(error.SavepointCreationFailed(error.format_error(adapter_err)))
+  }
+}
+
+/// Rollback to a named savepoint.
+/// All changes made after the savepoint was created are discarded.
+/// The savepoint remains active and can be rolled back to again.
+pub fn rollback_to_savepoint(
+  conn: PostgresConnection,
+  name: String,
+) -> Result(Nil, error.SavepointError(Nil)) {
+  let sql = "ROLLBACK TO SAVEPOINT " <> escape_identifier(name)
+  case execute_sql_mutation(conn, sql, []) {
+    Ok(_) -> Ok(Nil)
+    Error(adapter_err) -> Error(error.SavepointAdapterError(adapter_err))
+  }
+}
+
+/// Release a savepoint without rolling back.
+/// This destroys the savepoint but keeps all changes made after it.
+/// This is useful to free up resources when a savepoint is no longer needed.
+pub fn release_savepoint(
+  conn: PostgresConnection,
+  name: String,
+) -> Result(Nil, error.SavepointError(Nil)) {
+  let sql = "RELEASE SAVEPOINT " <> escape_identifier(name)
+  case execute_sql_mutation(conn, sql, []) {
+    Ok(_) -> Ok(Nil)
+    Error(adapter_err) ->
+      Error(error.SavepointReleaseFailed(error.format_error(adapter_err)))
+  }
+}
+
+/// Execute a function within a savepoint.
+/// If the function succeeds, the savepoint is released.
+/// If the function fails, changes are rolled back to the savepoint.
+/// This must be called within an active transaction.
+pub fn execute_savepoint(
+  conn: PostgresConnection,
+  name: String,
+  operation: fn(PostgresConnection) -> Result(a, error.AdapterError),
+) -> Result(a, error.SavepointError(Nil)) {
+  // Create the savepoint
+  case create_savepoint(conn, name) {
+    Error(err) -> Error(err)
+    Ok(_) -> {
+      // Execute the operation
+      case operation(conn) {
+        Ok(result) -> {
+          // Release savepoint on success
+          case release_savepoint(conn, name) {
+            Ok(_) -> Ok(result)
+            Error(err) -> Error(err)
+          }
+        }
+        Error(adapter_err) -> {
+          // Rollback to savepoint on failure
+          let _ = rollback_to_savepoint(conn, name)
+          Error(error.SavepointAdapterError(adapter_err))
+        }
+      }
+    }
+  }
+}
+
+/// Execute a function within a savepoint, allowing user errors.
+/// If the function succeeds, the savepoint is released.
+/// If the function fails, changes are rolled back to the savepoint.
+pub fn execute_savepoint_with_user_error(
+  conn: PostgresConnection,
+  name: String,
+  operation: fn(PostgresConnection) -> Result(a, e),
+) -> Result(a, error.SavepointError(e)) {
+  // Create the savepoint
+  case create_savepoint(conn, name) {
+    Error(error.SavepointCreationFailed(reason)) ->
+      Error(error.SavepointCreationFailed(reason))
+    Error(error.SavepointAdapterError(adapter_err)) ->
+      Error(error.SavepointAdapterError(adapter_err))
+    Error(error.SavepointNotFound(n)) -> Error(error.SavepointNotFound(n))
+    Error(error.SavepointReleaseFailed(r)) ->
+      Error(error.SavepointReleaseFailed(r))
+    Error(error.SavepointNoTransaction) -> Error(error.SavepointNoTransaction)
+    Error(error.SavepointUserError(_)) ->
+      Error(error.SavepointCreationFailed("Unexpected user error"))
+    Ok(_) -> {
+      // Execute the operation
+      case operation(conn) {
+        Ok(result) -> {
+          // Release savepoint on success
+          case release_savepoint(conn, name) {
+            Ok(_) -> Ok(result)
+            Error(error.SavepointReleaseFailed(reason)) ->
+              Error(error.SavepointReleaseFailed(reason))
+            Error(error.SavepointAdapterError(adapter_err)) ->
+              Error(error.SavepointAdapterError(adapter_err))
+            Error(error.SavepointNotFound(n)) ->
+              Error(error.SavepointNotFound(n))
+            Error(error.SavepointCreationFailed(r)) ->
+              Error(error.SavepointCreationFailed(r))
+            Error(error.SavepointNoTransaction) ->
+              Error(error.SavepointNoTransaction)
+            Error(error.SavepointUserError(_)) ->
+              Error(error.SavepointReleaseFailed("Unexpected user error"))
+          }
+        }
+        Error(user_err) -> {
+          // Rollback to savepoint on failure
+          let _ = rollback_to_savepoint(conn, name)
+          Error(error.SavepointUserError(user_err))
+        }
+      }
+    }
+  }
+}
+
+/// Escape a SQL identifier (table name, savepoint name, etc.)
+/// to prevent SQL injection.
+fn escape_identifier(name: String) -> String {
+  // Replace any double quotes with escaped double quotes
+  // and wrap in double quotes for PostgreSQL identifier quoting
+  "\"" <> replace_all(name, "\"", "\"\"") <> "\""
+}
+
+/// Replace all occurrences of a substring
+fn replace_all(string: String, from: String, to: String) -> String {
+  do_replace_all(string, from, to, "")
+}
+
+fn do_replace_all(
+  string: String,
+  from: String,
+  to: String,
+  acc: String,
+) -> String {
+  case string_starts_with(string, from) {
+    True -> {
+      let rest = string_drop(string, string_length(from))
+      do_replace_all(rest, from, to, acc <> to)
+    }
+    False -> {
+      case string_pop_grapheme(string) {
+        Ok(#(char, rest)) -> do_replace_all(rest, from, to, acc <> char)
+        Error(_) -> acc
+      }
+    }
+  }
+}
+
+/// Check if string starts with prefix
+fn string_starts_with(string: String, prefix: String) -> Bool {
+  string_take(string, string_length(prefix)) == prefix
+}
+
+/// Take first n graphemes from string
+fn string_take(string: String, n: Int) -> String {
+  do_string_take(string, n, "")
+}
+
+fn do_string_take(string: String, n: Int, acc: String) -> String {
+  case n <= 0 {
+    True -> acc
+    False ->
+      case string_pop_grapheme(string) {
+        Ok(#(char, rest)) -> do_string_take(rest, n - 1, acc <> char)
+        Error(_) -> acc
+      }
+  }
+}
+
+/// Drop first n graphemes from string
+fn string_drop(string: String, n: Int) -> String {
+  case n <= 0 {
+    True -> string
+    False ->
+      case string_pop_grapheme(string) {
+        Ok(#(_, rest)) -> string_drop(rest, n - 1)
+        Error(_) -> ""
+      }
+  }
+}
+
+/// Get string length in graphemes
+fn string_length(string: String) -> Int {
+  do_string_length(string, 0)
+}
+
+fn do_string_length(string: String, acc: Int) -> Int {
+  case string_pop_grapheme(string) {
+    Ok(#(_, rest)) -> do_string_length(rest, acc + 1)
+    Error(_) -> acc
+  }
+}
+
+@external(erlang, "string", "next_grapheme")
+fn string_pop_grapheme(string: String) -> Result(#(String, String), Nil)
+
+// ============================================================================
 // RAW QUERY EXECUTION (Convenience functions)
 // ============================================================================
 
