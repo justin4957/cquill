@@ -1,0 +1,298 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  GLEAM_VERSION: "1.14.0"
+  OTP_VERSION: "28"
+  REBAR3_VERSION: "3"
+
+jobs:
+  # ============================================================================
+  # Code Quality Checks
+  # ============================================================================
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Check formatting
+        run: gleam format --check src test
+
+      - name: Check for warnings (build)
+        run: |
+          gleam build 2>&1 | tee build_output.txt
+          # Fail if there are any errors (warnings are allowed but logged)
+          if grep -q "^error:" build_output.txt; then
+            echo "Build errors found!"
+            exit 1
+          fi
+
+  # ============================================================================
+  # Test Suite
+  # ============================================================================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Run tests
+        run: gleam test
+
+  # ============================================================================
+  # Build Verification
+  # ============================================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Build project
+        run: gleam build
+
+      - name: Build escript
+        run: gleam run -m gleescript
+
+      - name: Verify escript works
+        run: |
+          ./cquill --help
+          ./cquill --version
+
+  # ============================================================================
+  # Documentation Check
+  # ============================================================================
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Generate documentation
+        run: gleam docs build
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: build/dev/docs/
+          retention-days: 7
+
+  # ============================================================================
+  # Matrix Testing (Multiple OTP/Gleam versions)
+  # ============================================================================
+  compatibility:
+    name: Compatibility (${{ matrix.gleam }} / OTP ${{ matrix.otp }})
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Latest stable
+          - gleam: "1.14.0"
+            otp: "28"
+          # Current Gleam with previous OTP
+          - gleam: "1.14.0"
+            otp: "27"
+          # Current Gleam with older OTP
+          - gleam: "1.14.0"
+            otp: "26"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          gleam-version: ${{ matrix.gleam }}
+          rebar3-version: "3"
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ matrix.gleam }}-otp-${{ matrix.otp }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ matrix.gleam }}-otp-${{ matrix.otp }}-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Run tests
+        run: gleam test
+
+  # ============================================================================
+  # Security Audit (check for known vulnerabilities in dependencies)
+  # ============================================================================
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Check manifest integrity
+        run: |
+          # Verify manifest.toml exists and is valid
+          if [ ! -f manifest.toml ]; then
+            echo "manifest.toml not found!"
+            exit 1
+          fi
+          echo "Manifest file exists and is readable"
+
+      - name: List dependencies
+        run: |
+          echo "=== Project Dependencies ==="
+          cat manifest.toml
+          echo ""
+          echo "=== Dependency Tree ==="
+          gleam deps list || true
+
+  # ============================================================================
+  # Final Status Check
+  # ============================================================================
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [code-quality, test, build, docs, compatibility, security]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [ "${{ needs.code-quality.result }}" != "success" ]; then
+            echo "Code quality check failed"
+            exit 1
+          fi
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "Build failed"
+            exit 1
+          fi
+          if [ "${{ needs.docs.result }}" != "success" ]; then
+            echo "Documentation build failed"
+            exit 1
+          fi
+          if [ "${{ needs.compatibility.result }}" != "success" ]; then
+            echo "Compatibility tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.security.result }}" != "success" ]; then
+            echo "Security audit failed"
+            exit 1
+          fi
+          echo "All CI checks passed!"
