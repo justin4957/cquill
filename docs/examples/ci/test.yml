@@ -1,0 +1,123 @@
+# GitHub Actions workflow for testing with database migrations
+# Copy this to .github/workflows/test.yml
+
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/myapp_test?sslmode=disable
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: myapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      - name: Run database migrations
+        run: dbmate up
+
+      - name: Setup Erlang/OTP and Gleam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          gleam-version: "1.4"
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Check formatting
+        run: gleam format --check
+
+      - name: Build project
+        run: gleam build
+
+      - name: Verify generated code is up to date
+        run: |
+          gleam run -m cquill_cli generate
+          if ! git diff --exit-code src/db/; then
+            echo "ERROR: Generated code is out of sync with database schema!"
+            echo ""
+            echo "To fix this:"
+            echo "1. Run 'make db-generate' locally"
+            echo "2. Commit the updated generated code"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: gleam test
+
+  # Optional: Run tests on multiple Erlang/OTP versions
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        otp: ["25", "26", "27"]
+        gleam: ["1.4"]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: myapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      - name: Run migrations
+        run: dbmate up
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/myapp_test?sslmode=disable
+
+      - name: Setup Erlang/OTP and Gleam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          gleam-version: ${{ matrix.gleam }}
+
+      - name: Test
+        run: gleam test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/myapp_test?sslmode=disable

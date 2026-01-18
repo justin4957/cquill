@@ -74,6 +74,35 @@ pub fn main() {
 - **Adapter abstraction** — Same API works with Postgres, in-memory, or custom backends
 - **Testable by design** — Use in-memory adapter for fast, isolated tests
 
+## Database Migrations
+
+cquill focuses on runtime data access, not schema evolution. We recommend using dedicated migration tools:
+
+| Tool | Best For | Installation |
+|------|----------|--------------|
+| [dbmate](https://github.com/amacneil/dbmate) | Simple SQL migrations | `brew install dbmate` |
+| [sqitch](https://sqitch.org/) | Complex dependency chains | `brew install sqitch` |
+| [flyway](https://flywaydb.org/) | Enterprise environments | `brew install flyway` |
+
+### Quick Start with dbmate
+
+```bash
+# Create a migration
+dbmate new add_users_table
+
+# Apply migrations
+dbmate up
+
+# Regenerate cquill types
+gleam run -m cquill_cli generate
+```
+
+See [docs/MIGRATIONS.md](docs/MIGRATIONS.md) for the complete migration guide, including:
+- CI/CD integration examples
+- Schema drift detection
+- Makefile templates
+- Best practices
+
 ## Status
 
 This library is currently in early development. See the [GitHub Issues](https://github.com/justin4957/cquill/issues) for the development roadmap.
