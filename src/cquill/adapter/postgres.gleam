@@ -534,6 +534,74 @@ pub type TransactionError {
   RolledBack(String)
 }
 
+/// Execute a transaction with automatic error handling.
+/// This version uses the standard cquill TransactionError type.
+/// - On success: commits and returns the result
+/// - On adapter error (constraint violation, etc.): rolls back and returns AdapterTransactionError
+/// - On pog query error during transaction: returns AdapterTransactionError
+pub fn execute_transaction(
+  conn: PostgresConnection,
+  operation: fn(PostgresConnection) -> Result(a, error.AdapterError),
+) -> Result(a, error.TransactionError(Nil)) {
+  let PostgresConnection(pool) = conn
+
+  case
+    pog.transaction(pool, fn(tx_pool) {
+      let tx_conn = PostgresConnection(connection: tx_pool)
+      operation(tx_conn)
+    })
+  {
+    Ok(result) -> Ok(result)
+    Error(pog.TransactionQueryError(query_err)) -> {
+      let adapter_err = map_query_error(query_err)
+      // Check for serialization failure (PostgreSQL code 40001)
+      case query_err {
+        pog.PostgresqlError("40001", _, _) -> Error(error.SerializationFailure)
+        pog.QueryTimeout -> Error(error.TransactionTimeout)
+        _ -> Error(error.AdapterTransactionError(adapter_err))
+      }
+    }
+    Error(pog.TransactionRolledBack(adapter_err)) -> {
+      // The user's operation returned an AdapterError, which caused rollback
+      Error(error.AdapterTransactionError(adapter_err))
+    }
+  }
+}
+
+/// Execute a transaction with a user error type.
+/// This version allows the operation to return a custom error type.
+/// - On success: commits and returns the result
+/// - On user error: rolls back and returns UserError
+/// - On pog query error during transaction: returns AdapterTransactionError
+pub fn execute_transaction_with_user_error(
+  conn: PostgresConnection,
+  operation: fn(PostgresConnection) -> Result(a, e),
+) -> Result(a, error.TransactionError(e)) {
+  let PostgresConnection(pool) = conn
+
+  case
+    pog.transaction(pool, fn(tx_pool) {
+      let tx_conn = PostgresConnection(connection: tx_pool)
+      operation(tx_conn)
+    })
+  {
+    Ok(result) -> Ok(result)
+    Error(pog.TransactionQueryError(query_err)) -> {
+      let adapter_err = map_query_error(query_err)
+      // Check for serialization failure (PostgreSQL code 40001)
+      case query_err {
+        pog.PostgresqlError("40001", _, _) -> Error(error.SerializationFailure)
+        pog.QueryTimeout -> Error(error.TransactionTimeout)
+        _ -> Error(error.AdapterTransactionError(adapter_err))
+      }
+    }
+    Error(pog.TransactionRolledBack(user_error)) -> {
+      // The user's operation returned an error, which caused rollback
+      Error(error.UserError(user_error))
+    }
+  }
+}
+
 // ============================================================================
 // RAW QUERY EXECUTION (Convenience functions)
 // ============================================================================

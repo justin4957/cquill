@@ -73,7 +73,9 @@ pub type MemoryStore {
     tables: Dict(String, MemoryTable),
     /// Whether we're in a transaction
     in_transaction: Bool,
-    /// Snapshot of tables at transaction start (for rollback)
+    /// Stack of snapshots for nested transactions (most recent first)
+    snapshots: List(Snapshot),
+    /// Legacy single snapshot field for backwards compatibility
     snapshot: Option(Snapshot),
   )
 }
@@ -88,7 +90,12 @@ pub type MemoryRow =
 
 /// Create a new empty memory store
 pub fn new_store() -> MemoryStore {
-  MemoryStore(tables: dict.new(), in_transaction: False, snapshot: None)
+  MemoryStore(
+    tables: dict.new(),
+    in_transaction: False,
+    snapshots: [],
+    snapshot: None,
+  )
 }
 
 /// Create a new empty memory store (alias for new_store)
@@ -102,7 +109,22 @@ pub fn reset(store: MemoryStore) -> MemoryStore {
     dict.map_values(store.tables, fn(_name, table) {
       MemoryTable(..table, rows: dict.new(), next_id: 1)
     })
-  MemoryStore(tables: empty_tables, in_transaction: False, snapshot: None)
+  MemoryStore(
+    tables: empty_tables,
+    in_transaction: False,
+    snapshots: [],
+    snapshot: None,
+  )
+}
+
+/// Check if the store is currently in a transaction
+pub fn in_transaction(store: MemoryStore) -> Bool {
+  store.in_transaction
+}
+
+/// Get the current transaction depth (0 = not in transaction)
+pub fn transaction_depth(store: MemoryStore) -> Int {
+  list.length(store.snapshots)
 }
 
 /// Create a table in the store (simple version with just primary key)
@@ -766,36 +788,66 @@ fn execute_returning(
 }
 
 /// Begin a transaction by taking a snapshot
+/// Supports nested transactions via snapshot stack
 fn begin_transaction(store: MemoryStore) -> Result(MemoryStore, AdapterError) {
-  case store.in_transaction {
-    True -> Error(error.QueryFailed("Already in transaction", None))
-    False -> {
-      // Create snapshot of current state
-      let id_counters =
-        dict.map_values(store.tables, fn(_name, table) { table.next_id })
-      let snapshot = Snapshot(tables: store.tables, id_counters: id_counters)
-      Ok(MemoryStore(..store, in_transaction: True, snapshot: Some(snapshot)))
-    }
+  // Create snapshot of current state
+  let id_counters =
+    dict.map_values(store.tables, fn(_name, table) { table.next_id })
+  let snapshot = Snapshot(tables: store.tables, id_counters: id_counters)
+
+  // Push snapshot onto the stack
+  Ok(
+    MemoryStore(
+      ..store,
+      in_transaction: True,
+      snapshots: [snapshot, ..store.snapshots],
+      snapshot: Some(snapshot),
+    ),
+  )
+}
+
+/// Commit a transaction by popping the snapshot
+fn commit_transaction(store: MemoryStore) -> Result(Nil, AdapterError) {
+  case store.in_transaction, store.snapshots {
+    False, _ -> Error(error.QueryFailed("Not in transaction", None))
+    True, [] -> Error(error.QueryFailed("No transaction to commit", None))
+    True, _ -> Ok(Nil)
   }
 }
 
-/// Commit a transaction by clearing the snapshot
-fn commit_transaction(store: MemoryStore) -> Result(Nil, AdapterError) {
-  case store.in_transaction {
-    False -> Error(error.QueryFailed("Not in transaction", None))
-    True -> Ok(Nil)
+/// Get the store state after committing a transaction
+/// This is needed for the memory adapter since commit_transaction returns Nil
+pub fn commit_and_continue(
+  store: MemoryStore,
+) -> Result(MemoryStore, AdapterError) {
+  case store.in_transaction, store.snapshots {
+    False, _ -> Error(error.QueryFailed("Not in transaction", None))
+    True, [] -> Error(error.QueryFailed("No transaction to commit", None))
+    True, [_committed, ..rest] -> {
+      // Pop the snapshot, check if we're still in a nested transaction
+      let still_in_transaction = !list.is_empty(rest)
+      let new_snapshot = case rest {
+        [s, ..] -> Some(s)
+        [] -> None
+      }
+      Ok(
+        MemoryStore(
+          ..store,
+          in_transaction: still_in_transaction,
+          snapshots: rest,
+          snapshot: new_snapshot,
+        ),
+      )
+    }
   }
 }
 
 /// Rollback a transaction by restoring the snapshot
 fn rollback_transaction(store: MemoryStore) -> Result(Nil, AdapterError) {
-  case store.in_transaction, store.snapshot {
+  case store.in_transaction, store.snapshots {
     False, _ -> Error(error.QueryFailed("Not in transaction", None))
-    True, None -> Error(error.QueryFailed("No snapshot to restore", None))
-    True, Some(_snapshot) -> {
-      // Would restore: MemoryStore(tables: snapshot.tables, in_transaction: False, snapshot: None)
-      Ok(Nil)
-    }
+    True, [] -> Error(error.QueryFailed("No snapshot to restore", None))
+    True, [_, ..] -> Ok(Nil)
   }
 }
 
@@ -804,10 +856,10 @@ fn rollback_transaction(store: MemoryStore) -> Result(Nil, AdapterError) {
 pub fn rollback_and_restore(
   store: MemoryStore,
 ) -> Result(MemoryStore, AdapterError) {
-  case store.in_transaction, store.snapshot {
+  case store.in_transaction, store.snapshots {
     False, _ -> Error(error.QueryFailed("Not in transaction", None))
-    True, None -> Error(error.QueryFailed("No snapshot to restore", None))
-    True, Some(snapshot) -> {
+    True, [] -> Error(error.QueryFailed("No snapshot to restore", None))
+    True, [snapshot, ..rest] -> {
       // Restore the tables and id counters from snapshot
       let restored_tables =
         dict.map_values(snapshot.tables, fn(name, table) {
@@ -816,11 +868,57 @@ pub fn rollback_and_restore(
             Error(_) -> table
           }
         })
+      // Check if we're still in a nested transaction
+      let still_in_transaction = !list.is_empty(rest)
+      let new_snapshot = case rest {
+        [s, ..] -> Some(s)
+        [] -> None
+      }
       Ok(MemoryStore(
         tables: restored_tables,
-        in_transaction: False,
-        snapshot: None,
+        in_transaction: still_in_transaction,
+        snapshots: rest,
+        snapshot: new_snapshot,
       ))
+    }
+  }
+}
+
+/// Execute a function within a transaction on the memory store.
+/// Automatically commits on success and rolls back on error.
+/// Returns the updated store along with the result.
+pub fn execute_transaction(
+  store: MemoryStore,
+  operation: fn(MemoryStore) -> Result(#(MemoryStore, a), error.AdapterError),
+) -> Result(#(MemoryStore, a), error.TransactionError(Nil)) {
+  // Begin transaction
+  case begin_transaction(store) {
+    Error(e) ->
+      Error(error.BeginFailed(
+        "Could not begin transaction: " <> error.format_error(e),
+      ))
+    Ok(tx_store) -> {
+      // Run the operation
+      case operation(tx_store) {
+        Ok(#(updated_store, result)) -> {
+          // Commit on success
+          case commit_and_continue(updated_store) {
+            Ok(committed_store) -> Ok(#(committed_store, result))
+            Error(e) ->
+              Error(error.CommitFailed(
+                "Commit failed: " <> error.format_error(e),
+              ))
+          }
+        }
+        Error(adapter_err) -> {
+          // Rollback on error
+          let rolled_back = case rollback_and_restore(tx_store) {
+            Ok(s) -> s
+            Error(_) -> store
+          }
+          Error(error.AdapterTransactionError(adapter_err))
+        }
+      }
     }
   }
 }

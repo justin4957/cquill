@@ -105,6 +105,9 @@ pub type TransactionError(e) {
   /// The user-provided function returned an error
   UserError(e)
 
+  /// Error from the adapter/database during transaction
+  AdapterTransactionError(AdapterError)
+
   /// Transaction could not be started
   BeginFailed(reason: String)
 
@@ -114,11 +117,20 @@ pub type TransactionError(e) {
   /// Explicit rollback was requested
   RolledBack
 
+  /// Transaction was explicitly rolled back with a reason
+  TransactionRollback(reason: String)
+
   /// Connection was lost during transaction
   TransactionConnectionLost
 
   /// Nested transaction attempted (not supported)
   NestedTransactionError
+
+  /// Transaction timed out
+  TransactionTimeout
+
+  /// Serialization failure (retry may succeed) - for serializable isolation
+  SerializationFailure
 }
 
 // ============================================================================
@@ -257,11 +269,17 @@ pub fn format_error(error: AdapterError) -> String {
 pub fn format_transaction_error(error: TransactionError(e)) -> String {
   case error {
     UserError(_) -> "Transaction aborted: user error"
+    AdapterTransactionError(adapter_err) ->
+      "Transaction aborted: " <> format_error(adapter_err)
     BeginFailed(reason) -> "Failed to begin transaction: " <> reason
     CommitFailed(reason) -> "Failed to commit transaction: " <> reason
     RolledBack -> "Transaction was rolled back"
+    TransactionRollback(reason) -> "Transaction rolled back: " <> reason
     TransactionConnectionLost -> "Connection lost during transaction"
     NestedTransactionError -> "Nested transactions are not supported"
+    TransactionTimeout -> "Transaction timed out"
+    SerializationFailure ->
+      "Serialization failure: concurrent transaction conflict (retry may succeed)"
   }
 }
 

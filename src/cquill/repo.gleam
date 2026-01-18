@@ -557,13 +557,19 @@ pub fn transaction(
   case adapter.transaction(adapter, connection, operation) {
     Ok(result) -> Ok(result)
     Error(error.UserError(e)) -> Error(UserAborted(e))
+    Error(error.AdapterTransactionError(adapter_err)) ->
+      Error(AdapterError(adapter_err))
     Error(error.BeginFailed(reason)) -> Error(TransactionFailed(reason))
     Error(error.CommitFailed(reason)) -> Error(CommitFailed(reason))
     Error(error.RolledBack) -> Error(RolledBack)
+    Error(error.TransactionRollback(reason)) ->
+      Error(TransactionFailed("Rolled back: " <> reason))
     Error(error.TransactionConnectionLost) ->
       Error(TransactionFailed("Connection lost"))
     Error(error.NestedTransactionError) ->
       Error(TransactionFailed("Nested transactions not supported"))
+    Error(error.TransactionTimeout) -> Error(TransactionTimedOut)
+    Error(error.SerializationFailure) -> Error(SerializationConflict)
   }
 }
 
@@ -571,6 +577,9 @@ pub fn transaction(
 pub type RepoTransactionError(e) {
   /// User's operation returned an error, transaction was rolled back
   UserAborted(e)
+
+  /// Adapter/database error during transaction, transaction was rolled back
+  AdapterError(error.AdapterError)
 
   /// Transaction failed to start or commit
   TransactionFailed(reason: String)
@@ -580,6 +589,12 @@ pub type RepoTransactionError(e) {
 
   /// Transaction was explicitly rolled back
   RolledBack
+
+  /// Transaction timed out
+  TransactionTimedOut
+
+  /// Serialization failure - concurrent transaction conflict (retry may succeed)
+  SerializationConflict
 }
 
 // ============================================================================
