@@ -246,9 +246,7 @@ pub fn nullable_fields(schema: Schema) -> List(Field) {
 
 /// Get all required (non-nullable, no default) fields
 pub fn required_fields(schema: Schema) -> List(Field) {
-  list.filter(schema.fields, fn(f) {
-    !field.is_nullable(f) && option.is_none(f.default)
-  })
+  list.filter(schema.fields, field.is_required)
 }
 
 /// Get all auto-increment fields

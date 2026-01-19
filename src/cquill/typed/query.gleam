@@ -20,6 +20,7 @@
 // |> typed_where(typed_eq(post_title, "Hello"))
 // ```
 
+import cquill/query
 import cquill/query/ast
 import cquill/typed/raw.{type RawExpr}
 import cquill/typed/table.{
@@ -1036,25 +1037,25 @@ pub fn typed_having(
 /// Check if the query has any WHERE conditions.
 pub fn typed_has_conditions(query: TypedQuery(t)) -> Bool {
   let TypedQuery(inner: inner) = query
-  !list.is_empty(inner.wheres)
+  query.has_conditions(inner)
 }
 
 /// Check if the query has any ORDER BY clauses.
 pub fn typed_has_order_by(query: TypedQuery(t)) -> Bool {
   let TypedQuery(inner: inner) = query
-  !list.is_empty(inner.order_bys)
+  query.has_order_by(inner)
 }
 
 /// Check if the query has pagination.
 pub fn typed_has_pagination(query: TypedQuery(t)) -> Bool {
   let TypedQuery(inner: inner) = query
-  option.is_some(inner.limit) || option.is_some(inner.offset)
+  query.has_pagination(inner)
 }
 
 /// Check if the query is DISTINCT.
 pub fn typed_is_distinct(query: TypedQuery(t)) -> Bool {
   let TypedQuery(inner: inner) = query
-  inner.distinct
+  query.is_distinct(inner)
 }
 
 /// Get the LIMIT value.
