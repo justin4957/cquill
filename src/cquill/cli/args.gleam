@@ -4,6 +4,7 @@
 // It provides a simple manual parser for the generate command.
 
 import envoy
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -39,6 +40,8 @@ pub type GenerateOptions {
     prefix: String,
     /// Watch for schema changes and regenerate
     watch: Bool,
+    /// Polling interval in milliseconds for watch mode
+    poll_interval: Int,
     /// Run gleam format after generation
     format: Bool,
     /// Show what would be generated without writing
@@ -110,6 +113,9 @@ pub const default_schema = "public"
 /// Default module prefix
 pub const default_prefix = "db"
 
+/// Default poll interval in milliseconds (5 seconds)
+pub const default_poll_interval = 5000
+
 /// Create default generate options
 pub fn default_generate_options() -> GenerateOptions {
   GenerateOptions(
@@ -120,6 +126,7 @@ pub fn default_generate_options() -> GenerateOptions {
     exclude: None,
     prefix: default_prefix,
     watch: False,
+    poll_interval: default_poll_interval,
     format: True,
     dry_run: False,
     verbose: False,
@@ -195,6 +202,25 @@ fn parse_generate_args(
     ["--watch", ..rest] | ["-w", ..rest] ->
       parse_generate_args(rest, GenerateOptions(..opts, watch: True))
 
+    // Poll interval
+    ["--poll-interval", value, ..rest] ->
+      case int.parse(value) {
+        Ok(ms) if ms > 0 ->
+          parse_generate_args(rest, GenerateOptions(..opts, poll_interval: ms))
+        Ok(_) ->
+          Error(InvalidValue(
+            "poll-interval",
+            value,
+            "Must be a positive integer (milliseconds)",
+          ))
+        Error(_) ->
+          Error(InvalidValue(
+            "poll-interval",
+            value,
+            "Must be a valid integer (milliseconds)",
+          ))
+      }
+
     // Format flag
     ["--format", ..rest] | ["-f", ..rest] ->
       parse_generate_args(rest, GenerateOptions(..opts, format: True))
@@ -224,6 +250,7 @@ fn parse_generate_args(
     ["--tables"] | ["-t"] -> Error(MissingValue("tables"))
     ["--exclude"] | ["-e"] -> Error(MissingValue("exclude"))
     ["--prefix"] | ["-p"] -> Error(MissingValue("prefix"))
+    ["--poll-interval"] -> Error(MissingValue("poll-interval"))
 
     // Unknown option
     [opt, ..] ->
@@ -316,6 +343,9 @@ GENERATE OPTIONS:
 
     -w, --watch             Watch for schema changes and regenerate
 
+    --poll-interval <MS>    Polling interval in milliseconds for watch mode
+                            Default: 5000 (5 seconds)
+
     -f, --format            Run gleam format after generation
                             Default: true
     --no-format             Skip running gleam format
@@ -343,6 +373,12 @@ EXAMPLES:
 
     # Dry run to preview
     cquill generate --database-url $DATABASE_URL --dry-run
+
+    # Watch mode - regenerate on schema changes
+    cquill generate --database-url $DATABASE_URL --watch
+
+    # Watch with custom poll interval (2 seconds)
+    cquill generate --database-url $DATABASE_URL --watch --poll-interval 2000
 
 For more information, visit: https://hexdocs.pm/cquill"
 }

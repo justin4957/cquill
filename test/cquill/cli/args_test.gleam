@@ -4,8 +4,8 @@
 
 import cquill/cli/args.{
   type Command, type GenerateOptions, type ParseError, Generate, Help,
-  MissingRequired, MissingValue, UnknownCommand, UnknownOption, Version,
-  default_generate_options, format_error, parse, parse_table_list,
+  InvalidValue, MissingRequired, MissingValue, UnknownCommand, UnknownOption,
+  Version, default_generate_options, format_error, parse, parse_table_list,
   should_include_table,
 }
 import gleam/option.{None, Some}
@@ -218,6 +218,92 @@ pub fn parse_generate_with_short_watch_flag_test() {
   }
 }
 
+pub fn parse_generate_with_poll_interval_option_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--poll-interval",
+      "2000",
+    ])
+
+  case result {
+    Ok(Generate(opts)) -> {
+      opts.poll_interval
+      |> should.equal(2000)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_poll_interval_defaults_to_5000_test() {
+  let result =
+    parse(["generate", "--database-url", "postgres://localhost/mydb"])
+
+  case result {
+    Ok(Generate(opts)) -> {
+      opts.poll_interval
+      |> should.equal(5000)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_poll_interval_invalid_value_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--poll-interval",
+      "not_a_number",
+    ])
+
+  case result {
+    Error(InvalidValue("poll-interval", "not_a_number", _)) -> {
+      should.be_true(True)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_poll_interval_negative_value_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--poll-interval",
+      "-100",
+    ])
+
+  case result {
+    Error(InvalidValue("poll-interval", "-100", _)) -> {
+      should.be_true(True)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn parse_generate_poll_interval_zero_value_test() {
+  let result =
+    parse([
+      "generate",
+      "--database-url",
+      "postgres://localhost/mydb",
+      "--poll-interval",
+      "0",
+    ])
+
+  case result {
+    Error(InvalidValue("poll-interval", "0", _)) -> {
+      should.be_true(True)
+    }
+    _ -> should.fail()
+  }
+}
+
 pub fn parse_generate_with_dry_run_flag_test() {
   let result =
     parse([
@@ -425,6 +511,16 @@ pub fn parse_generate_unknown_option_test() {
   |> should.equal(Error(UnknownOption("--unknown")))
 }
 
+pub fn parse_generate_missing_poll_interval_value_test() {
+  parse([
+    "generate",
+    "--database-url",
+    "postgres://localhost/mydb",
+    "--poll-interval",
+  ])
+  |> should.equal(Error(MissingValue("poll-interval")))
+}
+
 // ============================================================================
 // DEFAULT OPTIONS TESTS
 // ============================================================================
@@ -452,6 +548,9 @@ pub fn default_generate_options_has_correct_defaults_test() {
 
   opts.watch
   |> should.be_false
+
+  opts.poll_interval
+  |> should.equal(5000)
 
   opts.format
   |> should.be_true

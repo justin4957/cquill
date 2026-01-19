@@ -334,10 +334,54 @@ module_prefix = "myapp/schema"
 exclude_tables = ["schema_migrations"]
 ```
 
+### Watch Mode
+
+Watch mode automatically regenerates code when the database schema changes. This is useful during development when you're frequently modifying your schema.
+
+```bash
+# Basic watch mode (polls every 5 seconds)
+cquill generate --database-url $DATABASE_URL --watch
+
+# Watch with custom poll interval (2 seconds)
+cquill generate --database-url $DATABASE_URL --watch --poll-interval 2000
+
+# Watch with verbose output to see when changes are detected
+cquill generate --database-url $DATABASE_URL --watch --verbose
+```
+
+Watch mode features:
+- **Automatic change detection**: Compares schema fingerprints to detect changes
+- **Configurable polling**: Set custom poll intervals with `--poll-interval <ms>`
+- **Graceful shutdown**: Press Ctrl+C to stop watching
+- **Status messages**: Shows timestamps and what changed when regenerating
+- **Error resilience**: Continues watching even if generation fails
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--watch, -w` | Flag | false | Enable watch mode |
+| `--poll-interval` | Int | 5000 | Polling interval in milliseconds |
+
+Example output:
+```
+cquill watch mode starting...
+
+Initial generation complete: 5 files generated
+
+Watching for schema changes...
+Poll interval: 5000ms
+Press Ctrl+C to stop.
+
+[2024-01-15 10:30:25] Schema change detected, regenerating...
+  Tables: 6
+  Enums: 2
+[2024-01-15 10:30:25] Regenerated 6 files
+```
+
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `CQUILL_DATABASE_URL` | Database URL for CLI tools | - |
 | `DATABASE_URL` | PostgreSQL connection URL | - |
 | `DB_HOST` | Database host | localhost |
 | `DB_PORT` | Database port | 5432 |
