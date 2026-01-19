@@ -673,7 +673,9 @@ pub fn execute_savepoint(
           }
         }
         Error(adapter_err) -> {
-          // Rollback to savepoint on failure
+          // Best-effort rollback to savepoint: the original error takes precedence.
+          // If rollback fails, we still return the operation's error since that's
+          // what caused the savepoint to fail in the first place.
           let _ = rollback_to_savepoint(conn, name)
           Error(error.SavepointAdapterError(adapter_err))
         }
@@ -724,7 +726,9 @@ pub fn execute_savepoint_with_user_error(
           }
         }
         Error(user_err) -> {
-          // Rollback to savepoint on failure
+          // Best-effort rollback to savepoint: the original user error takes precedence.
+          // If rollback fails, we still return the user's error since that's
+          // what caused the savepoint to fail in the first place.
           let _ = rollback_to_savepoint(conn, name)
           Error(error.SavepointUserError(user_err))
         }
