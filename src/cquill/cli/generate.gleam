@@ -7,7 +7,7 @@ import cquill/adapter
 import cquill/adapter/postgres
 import cquill/cli/args.{type GenerateOptions}
 import cquill/codegen/generator
-import cquill/introspection
+import cquill/introspection.{type IntrospectedSchema}
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -676,12 +676,273 @@ fn run_gleam_format(options: GenerateOptions) -> Nil {
 
 /// Run in watch mode, regenerating on schema changes
 pub fn watch(options: GenerateOptions) -> Nil {
-  io.println("Watch mode is not yet implemented.")
-  io.println("The generate command will run once instead.\n")
+  io.println("cquill watch mode starting...\n")
 
-  case run(options) {
-    GenerateSuccess(count) ->
-      io.println("Generated " <> int.to_string(count) <> " files.")
-    GenerateError(err) -> io.println_error("Error: " <> err)
+  // Perform initial generation
+  case connect_to_database(options) {
+    Error(err) -> {
+      io.println_error("Error: " <> err)
+    }
+    Ok(conn) -> {
+      case introspect_and_generate(conn, options) {
+        Error(err) -> io.println_error("Initial generation failed: " <> err)
+        Ok(#(fingerprint, count)) -> {
+          io.println(
+            "Initial generation complete: "
+            <> int.to_string(count)
+            <> " files generated",
+          )
+          io.println("\nWatching for schema changes...")
+          io.println(
+            "Poll interval: " <> int.to_string(options.poll_interval) <> "ms",
+          )
+          io.println("Press Ctrl+C to stop.\n")
+
+          // Start the watch loop
+          watch_loop(options, conn, fingerprint)
+        }
+      }
+    }
   }
 }
+
+/// Main watch loop that polls for schema changes
+fn watch_loop(
+  options: GenerateOptions,
+  conn: postgres.PostgresConnection,
+  last_fingerprint: String,
+) -> Nil {
+  // Sleep for the poll interval
+  process.sleep(options.poll_interval)
+
+  // Check for schema changes
+  case introspect_schema(conn, options) {
+    Error(err) -> {
+      io.println_error("Warning: Failed to introspect schema: " <> err)
+      // Continue watching despite the error
+      watch_loop(options, conn, last_fingerprint)
+    }
+    Ok(schema) -> {
+      let filtered_schema = filter_tables(schema, options)
+      let current_fingerprint = schema_fingerprint(filtered_schema)
+
+      case current_fingerprint == last_fingerprint {
+        True -> {
+          // No changes, continue watching
+          case options.verbose {
+            True -> io.println("[" <> timestamp() <> "] No changes detected")
+            False -> Nil
+          }
+          watch_loop(options, conn, last_fingerprint)
+        }
+        False -> {
+          // Schema changed, regenerate
+          io.println(
+            "\n[" <> timestamp() <> "] Schema change detected, regenerating...",
+          )
+
+          case generate_from_schema(filtered_schema, options) {
+            Error(err) -> {
+              io.println_error("Error regenerating: " <> err)
+              // Continue watching with old fingerprint
+              watch_loop(options, conn, last_fingerprint)
+            }
+            Ok(count) -> {
+              print_change_summary(options, filtered_schema)
+              io.println(
+                "["
+                <> timestamp()
+                <> "] Regenerated "
+                <> int.to_string(count)
+                <> " files\n",
+              )
+              // Continue watching with new fingerprint
+              watch_loop(options, conn, current_fingerprint)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Introspect schema and generate code, returning fingerprint and file count
+fn introspect_and_generate(
+  conn: postgres.PostgresConnection,
+  options: GenerateOptions,
+) -> Result(#(String, Int), String) {
+  case introspect_schema(conn, options) {
+    Error(err) -> Error(err)
+    Ok(schema) -> {
+      let filtered_schema = filter_tables(schema, options)
+      let fingerprint = schema_fingerprint(filtered_schema)
+
+      case generate_from_schema(filtered_schema, options) {
+        Error(err) -> Error(err)
+        Ok(count) -> Ok(#(fingerprint, count))
+      }
+    }
+  }
+}
+
+/// Generate code from an already-introspected schema
+fn generate_from_schema(
+  schema: IntrospectedSchema,
+  options: GenerateOptions,
+) -> Result(Int, String) {
+  case generate_code(schema, options) {
+    Error(err) -> Error(err)
+    Ok(modules) -> {
+      case options.dry_run {
+        True -> {
+          show_dry_run(modules, options)
+          Ok(list.length(modules))
+        }
+        False -> {
+          case write_files(modules, options) {
+            Error(err) -> Error(err)
+            Ok(count) -> {
+              case options.format {
+                True -> run_gleam_format(options)
+                False -> Nil
+              }
+              Ok(count)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Generate a fingerprint of the schema for change detection
+fn schema_fingerprint(schema: IntrospectedSchema) -> String {
+  // Build a canonical string representation of the schema
+  let table_strings =
+    schema.tables
+    |> list.sort(fn(a, b) { string.compare(a.name, b.name) })
+    |> list.map(fn(table) {
+      let column_strings =
+        table.columns
+        |> list.sort(fn(a, b) { string.compare(a.name, b.name) })
+        |> list.map(fn(col) {
+          col.name
+          <> ":"
+          <> col.data_type
+          <> ":"
+          <> case col.is_nullable {
+            True -> "null"
+            False -> "notnull"
+          }
+          <> ":"
+          <> case col.default {
+            Some(d) -> d
+            None -> ""
+          }
+        })
+        |> string.join(",")
+
+      table.name <> "[" <> column_strings <> "]"
+    })
+    |> string.join(";")
+
+  let enum_strings =
+    schema.enums
+    |> list.sort(fn(a, b) { string.compare(a.name, b.name) })
+    |> list.map(fn(e) { e.name <> "=" <> string.join(e.values, "|") })
+    |> string.join(";")
+
+  let combined = table_strings <> "||" <> enum_strings
+
+  // Hash the string to create a compact fingerprint using Erlang's crypto
+  erlang_hash_sha256(combined)
+  |> bytes_to_hex()
+}
+
+/// Hash a string using SHA-256 via Erlang's crypto module
+@external(erlang, "cquill_crypto_ffi", "hash_sha256")
+fn erlang_hash_sha256(input: String) -> BitArray
+
+/// Convert bytes to hex string
+fn bytes_to_hex(bytes: BitArray) -> String {
+  bytes_to_hex_loop(bytes, "")
+}
+
+fn bytes_to_hex_loop(bytes: BitArray, acc: String) -> String {
+  case bytes {
+    <<byte:int, rest:bits>> -> {
+      let hex = int_to_hex(byte)
+      bytes_to_hex_loop(rest, acc <> hex)
+    }
+    _ -> acc
+  }
+}
+
+fn int_to_hex(n: Int) -> String {
+  let high = n / 16
+  let low = n % 16
+  hex_digit(high) <> hex_digit(low)
+}
+
+fn hex_digit(n: Int) -> String {
+  case n {
+    0 -> "0"
+    1 -> "1"
+    2 -> "2"
+    3 -> "3"
+    4 -> "4"
+    5 -> "5"
+    6 -> "6"
+    7 -> "7"
+    8 -> "8"
+    9 -> "9"
+    10 -> "a"
+    11 -> "b"
+    12 -> "c"
+    13 -> "d"
+    14 -> "e"
+    _ -> "f"
+  }
+}
+
+/// Print a summary of what changed in the schema
+fn print_change_summary(
+  options: GenerateOptions,
+  schema: IntrospectedSchema,
+) -> Nil {
+  case options.verbose {
+    True -> {
+      io.println("  Tables: " <> int.to_string(list.length(schema.tables)))
+      io.println("  Enums: " <> int.to_string(list.length(schema.enums)))
+    }
+    False -> Nil
+  }
+}
+
+/// Get current timestamp string for logging
+fn timestamp() -> String {
+  // Use Erlang's calendar module to get current time
+  let #(#(year, month, day), #(hour, minute, second)) = erlang_localtime()
+  int.to_string(year)
+  <> "-"
+  <> pad_zero(month)
+  <> "-"
+  <> pad_zero(day)
+  <> " "
+  <> pad_zero(hour)
+  <> ":"
+  <> pad_zero(minute)
+  <> ":"
+  <> pad_zero(second)
+}
+
+fn pad_zero(n: Int) -> String {
+  case n < 10 {
+    True -> "0" <> int.to_string(n)
+    False -> int.to_string(n)
+  }
+}
+
+/// External function to get local time from Erlang
+@external(erlang, "calendar", "local_time")
+fn erlang_localtime() -> #(#(Int, Int, Int), #(Int, Int, Int))
