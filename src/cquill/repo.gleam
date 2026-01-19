@@ -29,6 +29,7 @@ import cquill/adapter.{
 }
 import cquill/error
 import cquill/schema.{type Schema}
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -139,7 +140,7 @@ pub fn from_adapter_error(err: AdapterError, context: String) -> RepoError {
     error.DecodeFailed(row, column, expected, got) ->
       QueryError(
         "Decode failed at row "
-        <> int_to_string(row)
+        <> int.to_string(row)
         <> ", column "
         <> column
         <> ": expected "
@@ -983,9 +984,9 @@ pub fn format_error(err: RepoError) -> String {
 
     TooManyRows(expected, got) ->
       "Too many rows: expected "
-      <> int_to_string(expected)
+      <> int.to_string(expected)
       <> ", got "
-      <> int_to_string(got)
+      <> int.to_string(got)
 
     ConstraintError(kind, detail) -> format_constraint_error(kind, detail)
 
@@ -1076,38 +1077,5 @@ fn collect_results(
     [] -> Ok(list.reverse(acc))
     [Ok(value), ..rest] -> collect_results(rest, [value, ..acc])
     [Error(msg), ..] -> Error(msg)
-  }
-}
-
-fn int_to_string(n: Int) -> String {
-  case n < 0 {
-    True -> "-" <> int_to_string(-n)
-    False ->
-      case n {
-        0 -> "0"
-        _ -> do_int_to_string(n, "")
-      }
-  }
-}
-
-fn do_int_to_string(n: Int, acc: String) -> String {
-  case n {
-    0 -> acc
-    _ -> {
-      let digit = n % 10
-      let char = case digit {
-        0 -> "0"
-        1 -> "1"
-        2 -> "2"
-        3 -> "3"
-        4 -> "4"
-        5 -> "5"
-        6 -> "6"
-        7 -> "7"
-        8 -> "8"
-        _ -> "9"
-      }
-      do_int_to_string(n / 10, char <> acc)
-    }
   }
 }
