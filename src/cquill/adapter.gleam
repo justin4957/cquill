@@ -389,7 +389,9 @@ pub fn transaction(
               }
             }
             Error(e) -> {
-              // Rollback on error
+              // Best-effort rollback: the original user error takes precedence.
+              // If rollback fails, we still return the user's error since that's
+              // what caused the transaction to fail in the first place.
               let _ = rollback_transaction(tx_conn)
               Error(UserError(e))
             }
@@ -441,6 +443,9 @@ pub fn transaction_with_adapter_errors(
               }
             }
             Error(adapter_err) -> {
+              // Best-effort rollback: the original adapter error takes precedence.
+              // If rollback fails, we still return the operation's error since that's
+              // what caused the transaction to fail in the first place.
               let _ = rollback_transaction(tx_conn)
               Error(AdapterTransactionError(adapter_err))
             }

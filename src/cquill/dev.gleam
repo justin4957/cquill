@@ -366,6 +366,8 @@ pub fn enable_from_env() -> Result(Nil, DevError) {
 
 /// Stop the dev mode server completely
 pub fn stop() -> Nil {
+  // Fire-and-forget cleanup: stop() always succeeds from the caller's perspective.
+  // Any errors during disable() are silently ignored since the intent is to clean up.
   let _ = disable()
   clear_dev_server()
 }
@@ -383,7 +385,9 @@ const pool_handler_id = "cquill_dev_pool"
 
 const transaction_handler_id = "cquill_dev_transaction"
 
-/// Attach telemetry handlers based on configuration
+/// Attach telemetry handlers based on configuration.
+/// Telemetry attachment is fire-and-forget: failures don't prevent dev mode from working.
+/// This is intentional since telemetry is observability infrastructure, not core functionality.
 fn attach_handlers(config: DevConfig) -> Result(Nil, DevError) {
   // Query logging handler
   case config.log_queries {
@@ -444,7 +448,9 @@ fn attach_handlers(config: DevConfig) -> Result(Nil, DevError) {
   Ok(Nil)
 }
 
-/// Detach all dev mode handlers
+/// Detach all dev mode handlers.
+/// Detachment is fire-and-forget cleanup: failures are silently ignored.
+/// This ensures cleanup always completes, even if some handlers were never attached.
 fn detach_handlers() -> Nil {
   let _ = telemetry.detach(query_handler_id)
   let _ = telemetry.detach(slow_query_handler_id)
