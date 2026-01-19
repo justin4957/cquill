@@ -9,6 +9,7 @@
 // 3. Preserve codes - adapter-specific error codes are preserved
 // 4. Recoverable flag - errors indicate if retry might help
 
+import gleam/int
 import gleam/option.{type Option, None, Some}
 import gleam/string
 
@@ -246,9 +247,9 @@ pub fn format_error(error: AdapterError) -> String {
     NotFound -> "Record not found"
     TooManyRows(expected, got) ->
       "Too many rows: expected "
-      <> string.inspect(expected)
+      <> int.to_string(expected)
       <> ", got "
-      <> string.inspect(got)
+      <> int.to_string(got)
 
     ConnectionFailed(reason) -> "Connection failed: " <> reason
     ConnectionTimeout -> "Connection timed out"
@@ -260,7 +261,7 @@ pub fn format_error(error: AdapterError) -> String {
       "Query failed [" <> code <> "]: " <> message
     DecodeFailed(row, column, expected, got) ->
       "Decode failed at row "
-      <> string.inspect(row)
+      <> int.to_string(row)
       <> ", column "
       <> column
       <> ": expected "
@@ -418,17 +419,14 @@ pub fn from_mysql_error(code: Int, message: String) -> AdapterError {
     2013 -> ConnectionLost("Lost connection during query")
 
     // Query errors
-    1064 -> QueryFailed("Syntax error: " <> message, Some(string.inspect(code)))
+    1064 -> QueryFailed("Syntax error: " <> message, Some(int.to_string(code)))
     1146 ->
-      QueryFailed(
-        "Table doesn't exist: " <> message,
-        Some(string.inspect(code)),
-      )
+      QueryFailed("Table doesn't exist: " <> message, Some(int.to_string(code)))
     1054 ->
-      QueryFailed("Unknown column: " <> message, Some(string.inspect(code)))
+      QueryFailed("Unknown column: " <> message, Some(int.to_string(code)))
 
     // Default: preserve as adapter-specific
-    _ -> AdapterSpecific(string.inspect(code), message)
+    _ -> AdapterSpecific(int.to_string(code), message)
   }
 }
 
@@ -471,10 +469,10 @@ pub fn from_sqlite_error(code: Int, message: String) -> AdapterError {
     26 -> ConnectionFailed("Not a database file")
 
     // SQLITE_ERROR (1) - SQL error or missing database
-    1 -> QueryFailed(message, Some(string.inspect(code)))
+    1 -> QueryFailed(message, Some(int.to_string(code)))
 
     // Default
-    _ -> AdapterSpecific(string.inspect(code), message)
+    _ -> AdapterSpecific(int.to_string(code), message)
   }
 }
 
