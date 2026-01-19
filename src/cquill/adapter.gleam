@@ -16,6 +16,7 @@
 import cquill/error.{
   AdapterTransactionError, BeginFailed, CommitFailed, NotSupported, UserError,
 }
+import gleam/list
 import gleam/option.{type Option}
 
 // ============================================================================
@@ -299,7 +300,7 @@ pub fn query_one(
   case execute_query(connection, compiled) {
     Ok([row]) -> Ok(row)
     Ok([]) -> Error(error.NotFound)
-    Ok(rows) -> Error(error.TooManyRows(1, length(rows)))
+    Ok(rows) -> Error(error.TooManyRows(1, list.length(rows)))
     Error(e) -> Error(e)
   }
 }
@@ -314,7 +315,7 @@ pub fn query_optional(
   case execute_query(connection, compiled) {
     Ok([row]) -> Ok(option.Some(row))
     Ok([]) -> Ok(option.None)
-    Ok(rows) -> Error(error.TooManyRows(1, length(rows)))
+    Ok(rows) -> Error(error.TooManyRows(1, list.length(rows)))
     Error(e) -> Error(e)
   }
 }
@@ -447,18 +448,6 @@ pub fn transaction_with_adapter_errors(
         }
       }
     }
-  }
-}
-
-// Helper function to get list length
-fn length(list: List(a)) -> Int {
-  do_length(list, 0)
-}
-
-fn do_length(list: List(a), acc: Int) -> Int {
-  case list {
-    [] -> acc
-    [_, ..rest] -> do_length(rest, acc + 1)
   }
 }
 
