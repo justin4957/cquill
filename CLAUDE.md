@@ -198,6 +198,61 @@ For each query feature:
   - Query layer: 85%+
   - Repo/Adapter: 80%+
 
+## Public API Definition
+
+The public API is fully documented in [docs/API_STABILITY.md](docs/API_STABILITY.md).
+
+### API Stability Tiers
+
+**Tier 1: Stable Core** (Highest stability guarantees)
+| Module | Purpose | Function Count |
+|--------|---------|----------------|
+| `cquill/schema` | Schema definitions and metadata | ~58 functions |
+| `cquill/schema/field` | Field types, constraints, modifiers | ~52 functions |
+| `cquill/query` | Query builder DSL | ~50 functions |
+| `cquill/repo` | Repository operations | ~80 functions |
+| `cquill/error` | Error types and classification | ~30 functions |
+
+**Tier 2: Stable Adapters**
+| Module | Purpose | Function Count |
+|--------|---------|----------------|
+| `cquill/adapter` | Adapter protocol and base types | ~30 functions |
+| `cquill/adapter/postgres` | PostgreSQL adapter | ~50 functions |
+| `cquill/adapter/memory` | In-memory reference adapter | ~70 functions |
+
+**Tier 3: Supporting Modules**
+| Module | Purpose | Function Count |
+|--------|---------|----------------|
+| `cquill/query/ast` | Query AST types | ~20 functions |
+| `cquill/query/builder` | Advanced query composition | ~30 functions |
+| `cquill/changeset` | Validation (minimal) | ~10 functions |
+| `cquill/testing` | Test utilities | ~20 functions |
+
+**Not Public API** (may change without notice):
+- `cquill/cli/*` - CLI implementation
+- `cquill/codegen/*` - Code generation internals
+- `cquill/dev` - Development mode
+- `cquill/telemetry` - Telemetry internals
+- `cquill/introspection` - Database introspection
+- Functions prefixed with `internal_`
+
+### API Design Principles
+
+1. **Pipeline-friendly**: Primary data structure is always the first parameter
+2. **Result types for I/O**: All database operations return `Result`
+3. **Option for missing values**: `get_field()`, `one()` return `Option`
+4. **Specific error types**: Errors are typed variants, not strings
+
+### Known API Considerations
+
+1. **Memory adapter returns tuples**: Because `MemoryStore` is immutable, operations return `#(MemoryStore, result)`. This is the correct Gleam pattern but differs from traditional mutable adapters.
+
+2. **Savepoint API**: `repo.savepoint()` requires adapter-specific calls because savepoint semantics vary between adapters. Use `postgres.execute_savepoint()` or `memory.execute_savepoint()` directly.
+
+3. **Query type parameter**: `Query(schema)` carries schema type for compile-time safety. The schema is not required at runtime - `Query(Nil)` works for untyped queries.
+
+4. **Common pattern functions**: `builder.not_deleted()`, `builder.published()`, etc. assume specific field names (`deleted_at`, `published`, `active`). Document or customize for your domain.
+
 ## Backwards Compatibility
 
 - Public API changes require deprecation period
@@ -239,8 +294,82 @@ This domain is used in:
 4. **Sandbox testing** — Isolated, parallelizable tests
 5. **Adapter abstraction** — Same API, different backends
 
+## Open Source Library Standards
+
+### Semantic Versioning
+
+cquill follows [Semantic Versioning 2.0.0](https://semver.org/):
+
+- **MAJOR (X.0.0)**: Breaking API changes
+- **MINOR (0.X.0)**: New features, backwards compatible
+- **PATCH (0.0.X)**: Bug fixes, backwards compatible
+
+**Pre-1.0 Policy:**
+- `0.x.y` releases may have breaking changes in minor versions
+- Document all breaking changes in CHANGELOG.md
+- Provide migration guides for breaking changes
+
+**Post-1.0 Policy:**
+- Breaking changes require major version bump
+- Deprecate before removing (minimum one minor version)
+- Security fixes may bypass deprecation cycle
+
+### Release Process
+
+See [docs/API_STABILITY.md](docs/API_STABILITY.md) for the complete release process.
+
+#### Pre-Release Checklist
+1. All tests pass (`gleam test`)
+2. Code formatted (`gleam format --check`)
+3. No compiler warnings
+4. CHANGELOG.md updated with all changes
+5. Documentation updated (`gleam docs build`)
+6. Version bumped in `gleam.toml`
+7. README.md examples verified working
+
+### Issue and PR Guidelines
+
+#### Issue Labels
+- `bug` - Something isn't working
+- `enhancement` - New feature or improvement
+- `documentation` - Documentation improvements
+- `breaking-change` - Will require major version bump
+- `good-first-issue` - Good for newcomers
+- `v1.0` - Issues targeted for v1.0.0 release
+
+#### PR Requirements
+1. Linked to an issue (use "Closes #123" or "Fixes #123")
+2. All CI checks pass
+3. Tests added for new functionality
+4. Documentation updated if needed
+5. CHANGELOG.md entry added
+
+#### Commit Message Format
+```
+type(scope): short description
+
+Longer description if needed.
+
+Closes #123
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+### Deprecation Policy
+
+When deprecating functionality:
+
+1. Add `@deprecated` annotation with version and alternative
+2. Log warning when deprecated function is called
+3. Document in CHANGELOG.md
+4. Keep deprecated code for at least one minor version
+5. Remove in next major version with migration guide
+
 ## References
 
 - [Ecto documentation](https://hexdocs.pm/ecto/)
 - [How Ecto promotes well-designed applications](https://www.mojotech.com/blog/how-elixir-ecto-promotes-well-designed-applications/)
 - [Understanding Ecto associations](https://blog.appsignal.com/2020/11/10/understanding-associations-in-elixir-ecto.html)
+- [Semantic Versioning](https://semver.org/)
+- [Keep a Changelog](https://keepachangelog.com/)
+- [API Stability Guide](docs/API_STABILITY.md)
