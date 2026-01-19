@@ -8,6 +8,7 @@
 // to their specific SQL dialects.
 
 import gleam/dynamic.{type Dynamic}
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -454,9 +455,9 @@ pub fn type_name(field_type: FieldType) -> String {
     BigInteger -> "bigint"
     Float -> "float"
     Decimal(p, s) ->
-      "decimal(" <> string.inspect(p) <> "," <> string.inspect(s) <> ")"
+      "decimal(" <> int.to_string(p) <> "," <> int.to_string(s) <> ")"
     String -> "string"
-    Char(l) -> "char(" <> string.inspect(l) <> ")"
+    Char(l) -> "char(" <> int.to_string(l) <> ")"
     Boolean -> "boolean"
     DateTime -> "datetime"
     Date -> "date"
