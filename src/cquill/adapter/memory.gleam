@@ -197,7 +197,7 @@ pub fn create_table_from_schema(
     |> list.index_map(fn(f, idx) { #(f, idx) })
     |> list.filter_map(fn(pair) {
       let #(f, idx) = pair
-      case !field.is_nullable(f) {
+      case field.is_not_nullable(f) {
         True -> Ok(idx)
         False -> Error(Nil)
       }
@@ -1110,6 +1110,15 @@ fn begin_transaction(store: MemoryStore) -> Result(MemoryStore, AdapterError) {
   )
 }
 
+/// Check if there are remaining nested transactions in the snapshot stack
+/// This is a positive assertion helper for readability
+fn has_remaining_transactions(snapshots: List(Snapshot)) -> Bool {
+  case snapshots {
+    [] -> False
+    _ -> True
+  }
+}
+
 /// Commit a transaction by popping the snapshot
 fn commit_transaction(store: MemoryStore) -> Result(Nil, AdapterError) {
   case store.in_transaction, store.snapshots {
@@ -1129,7 +1138,7 @@ pub fn commit_and_continue(
     True, [] -> Error(error.QueryFailed("No transaction to commit", None))
     True, [_committed, ..rest] -> {
       // Pop the snapshot, check if we're still in a nested transaction
-      let still_in_transaction = !list.is_empty(rest)
+      let still_in_transaction = has_remaining_transactions(rest)
       let new_snapshot = case rest {
         [s, ..] -> Some(s)
         [] -> None
@@ -1173,7 +1182,7 @@ pub fn rollback_and_restore(
           }
         })
       // Check if we're still in a nested transaction
-      let still_in_transaction = !list.is_empty(rest)
+      let still_in_transaction = has_remaining_transactions(rest)
       let new_snapshot = case rest {
         [s, ..] -> Some(s)
         [] -> None

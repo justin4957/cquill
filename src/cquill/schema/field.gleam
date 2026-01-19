@@ -382,6 +382,12 @@ pub fn is_nullable(field: Field) -> Bool {
   }
 }
 
+/// Check if field is NOT nullable (positive assertion helper)
+/// Use this instead of `!is_nullable(f)` for better readability
+pub fn is_not_nullable(field: Field) -> Bool {
+  !is_nullable(field)
+}
+
 /// Check if field is a primary key
 pub fn is_primary_key(field: Field) -> Bool {
   has_constraint(field, is_primary_key_constraint)
@@ -393,6 +399,12 @@ pub fn is_auto_increment(field: Field) -> Bool {
     Some(DefaultAutoIncrement) -> True
     _ -> False
   }
+}
+
+/// Check if field is required (non-nullable and has no default value)
+/// This is a positive assertion helper - use instead of `!is_nullable(f) && is_none(f.default)`
+pub fn is_required(field: Field) -> Bool {
+  is_not_nullable(field) && option.is_none(field.default)
 }
 
 /// Check if field has a specific constraint
