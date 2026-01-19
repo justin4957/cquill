@@ -8,12 +8,19 @@ Every query in cquill is represented as an Abstract Syntax Tree (AST):
 
 ```gleam
 import cquill/query
-import cquill/query/ast
+import cquill/schema
+import cquill/schema/field
+
+// Define a schema first
+let user_schema = schema.new("users")
+  |> schema.add_field(field.integer("id") |> field.primary_key())
+  |> schema.add_field(field.boolean("active"))
+  |> schema.add_field(field.datetime("created_at"))
 
 // This creates a Query data structure, not a SQL string
 let my_query =
-  query.from("users")
-  |> query.where(query.eq("active", ast.BoolValue(True)))
+  query.from(user_schema)
+  |> query.where(query.eq("active", True))
   |> query.order_by_asc("created_at")
   |> query.limit(10)
 ```
@@ -39,11 +46,14 @@ Query(
 
 ### FROM Clause
 
-Start every query by specifying the source table:
+Start every query by specifying the source:
 
 ```gleam
-// Simple table reference
-query.from("users")
+// From a schema (preferred - provides type safety)
+query.from(user_schema)
+
+// From a table name directly (for simple queries)
+query.from_table("users")
 
 // With schema qualification
 query.from_qualified("public", "users")
@@ -55,18 +65,19 @@ Specify which columns to retrieve:
 
 ```gleam
 // Select all columns (default)
-query.from("users")
+query.from_table("users")
 |> query.select_all()
 
 // Select specific columns
-query.from("users")
+query.from_table("users")
 |> query.select(["id", "email", "name"])
 
-// Select with expressions
-query.from("users")
+// Select with expressions (for computed columns, aggregates)
+import cquill/query/ast
+query.from_table("users")
 |> query.select_expr([
-  ast.ColumnExpr("id"),
-  ast.AggregateExpr(ast.Count, "id"),
+  ast.SelectExpression(ast.ColumnExpr("id"), option.None),
+  ast.SelectExpression(ast.AggregateExpr(ast.Count, "id"), option.Some("user_count")),
 ])
 ```
 
@@ -75,31 +86,34 @@ query.from("users")
 Filter results with conditions:
 
 ```gleam
-import cquill/query/ast
-
-// Single condition
-query.from("users")
-|> query.where(query.eq("active", ast.BoolValue(True)))
+// Single condition (type-inferred values)
+query.from_table("users")
+|> query.where(query.eq("active", True))
 
 // Multiple conditions (AND)
-query.from("users")
-|> query.where(query.eq("active", ast.BoolValue(True)))
-|> query.where(query.gt("age", ast.IntValue(18)))
+query.from_table("users")
+|> query.where(query.eq("active", True))
+|> query.where(query.gt("age", 18))
+
+// Using typed helpers for explicit types
+query.from_table("users")
+|> query.where(query.eq_bool("active", True))
+|> query.where(query.gt_int("age", 18))
 
 // OR conditions
-query.from("users")
-|> query.where(query.or_where([
-  query.eq("role", ast.StringValue("admin")),
-  query.eq("role", ast.StringValue("moderator")),
+query.from_table("users")
+|> query.where(query.or([
+  query.eq_string("role", "admin"),
+  query.eq_string("role", "moderator"),
 ]))
 
-// Complex conditions
-query.from("users")
-|> query.where(query.and_where([
-  query.eq("active", ast.BoolValue(True)),
-  query.or_where([
-    query.gt("age", ast.IntValue(21)),
-    query.eq("verified", ast.BoolValue(True)),
+// Complex conditions with AND/OR
+query.from_table("users")
+|> query.where(query.and([
+  query.eq("active", True),
+  query.or([
+    query.gt("age", 21),
+    query.eq("verified", True),
   ]),
 ]))
 ```
@@ -107,37 +121,46 @@ query.from("users")
 ### Condition Types
 
 ```gleam
-// Equality
+// Equality (type-inferred)
 query.eq("field", value)
 query.not_eq("field", value)
 
-// Comparison
+// Typed equality helpers
+query.eq_int("id", 1)
+query.eq_string("name", "Alice")
+query.eq_bool("active", True)
+
+// Comparison (type-inferred)
 query.gt("field", value)   // Greater than
 query.gte("field", value)  // Greater than or equal
 query.lt("field", value)   // Less than
 query.lte("field", value)  // Less than or equal
 
+// Typed comparison helpers
+query.gt_int("age", 18)
+query.lt_int("score", 100)
+
 // Pattern matching
 query.like("name", "%smith%")
 query.not_like("name", "%test%")
-query.ilike("name", "%SMITH%")  // Case insensitive
 
 // NULL checks
 query.is_null("deleted_at")
 query.is_not_null("email")
 
 // IN clause
-query.in_list("status", [
-  ast.StringValue("pending"),
-  ast.StringValue("active"),
-])
-query.not_in_list("status", [ast.StringValue("deleted")])
+query.is_in("status", ["pending", "active"])
+query.is_not_in("status", ["deleted"])
+
+// Typed IN helpers
+query.in_ints("id", [1, 2, 3])
+query.in_strings("role", ["admin", "moderator"])
 
 // BETWEEN
-query.between("age", ast.IntValue(18), ast.IntValue(65))
+query.between("age", 18, 65)
 
 // Negation
-query.not_where(query.eq("role", ast.StringValue("guest")))
+query.not(query.eq("role", "guest"))
 ```
 
 ### ORDER BY Clause
@@ -146,21 +169,25 @@ Sort results:
 
 ```gleam
 // Ascending order
-query.from("users")
+query.from_table("users")
 |> query.order_by_asc("created_at")
 
 // Descending order
-query.from("users")
+query.from_table("users")
 |> query.order_by_desc("score")
 
 // Multiple sort columns
-query.from("users")
+query.from_table("users")
 |> query.order_by_desc("score")
 |> query.order_by_asc("name")
 
+// With direction parameter
+query.from_table("users")
+|> query.order_by("score", query.desc)
+
 // With NULL handling
-query.from("users")
-|> query.order_by("score", ast.Desc, ast.NullsLast)
+query.from_table("users")
+|> query.order_by_with_nulls("score", query.desc, query.nulls_last)
 ```
 
 ### LIMIT and OFFSET
@@ -169,13 +196,17 @@ Paginate results:
 
 ```gleam
 // Limit results
-query.from("users")
+query.from_table("users")
 |> query.limit(10)
 
 // With offset (for pagination)
-query.from("users")
+query.from_table("users")
 |> query.limit(10)
 |> query.offset(20)  // Skip first 20 rows
+
+// Using the paginate helper
+query.from_table("users")
+|> query.paginate(page: 3, per_page: 10)  // Page 3 with 10 items per page
 ```
 
 ### DISTINCT
@@ -183,7 +214,7 @@ query.from("users")
 Remove duplicate rows:
 
 ```gleam
-query.from("users")
+query.from_table("users")
 |> query.select(["country"])
 |> query.distinct()
 ```
@@ -193,13 +224,15 @@ query.from("users")
 Aggregate data:
 
 ```gleam
-query.from("orders")
+import cquill/query/ast
+
+query.from_table("orders")
 |> query.select_expr([
-  ast.ColumnExpr("customer_id"),
-  ast.AggregateExpr(ast.Sum, "total"),
+  ast.SelectExpression(ast.ColumnExpr("customer_id"), option.None),
+  ast.SelectExpression(ast.AggregateExpr(ast.Sum, "total"), option.Some("total_sum")),
 ])
-|> query.group_by(["customer_id"])
-|> query.having(query.gt("sum_total", ast.IntValue(1000)))
+|> query.group_by("customer_id")
+|> query.having(query.gt("total_sum", 1000))
 ```
 
 ### JOIN Clause
@@ -207,38 +240,38 @@ query.from("orders")
 Join multiple tables:
 
 ```gleam
-query.from("orders")
-|> query.inner_join("customers", query.eq("orders.customer_id", "customers.id"))
-|> query.left_join("products", query.eq("orders.product_id", "products.id"))
+query.from_table("orders")
+|> query.join("customers", on: query.eq("orders.customer_id", "customers.id"))
+|> query.left_join("products", on: query.eq("orders.product_id", "products.id"))
 |> query.select(["orders.id", "customers.name", "products.title"])
 ```
 
 Join types:
-- `query.inner_join()` - Only matching rows
+- `query.join()` - Inner join (only matching rows)
 - `query.left_join()` - All left rows, matching right rows
 - `query.right_join()` - All right rows, matching left rows
 - `query.full_join()` - All rows from both tables
+- `query.cross_join()` - Cartesian product
 
 ## Query Composition
 
 Queries are immutable and composable:
 
 ```gleam
-// Base query
-let users = query.from("users")
+// Base query from a schema
+let users = query.from(user_schema)
 
 // Add conditions to create new queries
 let active_users = users
-  |> query.where(query.eq("active", ast.BoolValue(True)))
+  |> query.where(query.eq("active", True))
 
 let admin_users = users
-  |> query.where(query.eq("role", ast.StringValue("admin")))
+  |> query.where(query.eq_string("role", "admin"))
 
-// Combine for reusable query parts
+// Create reusable query parts
 fn paginated(q, page, per_page) {
   q
-  |> query.limit(per_page)
-  |> query.offset((page - 1) * per_page)
+  |> query.paginate(page: page, per_page: per_page)
 }
 
 let page_1 = active_users |> paginated(1, 20)
@@ -253,19 +286,19 @@ Create reusable query builders:
 // Filter by date range
 fn created_between(q, start_date, end_date) {
   q
-  |> query.where(query.gte("created_at", ast.StringValue(start_date)))
-  |> query.where(query.lt("created_at", ast.StringValue(end_date)))
+  |> query.where(query.gte("created_at", start_date))
+  |> query.where(query.lt("created_at", end_date))
 }
 
 // Filter by search term
 fn search_name(q, term) {
   q
-  |> query.where(query.ilike("name", "%" <> term <> "%"))
+  |> query.where(query.like("name", "%" <> term <> "%"))
 }
 
 // Combine multiple filters
 let results =
-  query.from("users")
+  query.from(user_schema)
   |> created_between("2024-01-01", "2024-12-31")
   |> search_name("john")
   |> query.order_by_asc("name")
@@ -320,15 +353,16 @@ let delete_query =
 
 ## Raw SQL
 
-For complex queries that can't be expressed with the builder:
+For complex queries that can't be expressed with the builder, use raw SQL conditions via the AST:
 
 ```gleam
-// Raw condition
-query.from("users")
-|> query.where(query.raw("age > ? AND verified = ?", [
-  ast.IntValue(18),
-  ast.BoolValue(True),
-]))
+import cquill/query/ast
+
+// Create a raw condition
+let raw_cond = ast.Raw("age > $1 AND verified = $2", [ast.IntValue(18), ast.BoolValue(True)])
+
+query.from_table("users")
+|> query.where(raw_cond)
 ```
 
 ## Query Inspection

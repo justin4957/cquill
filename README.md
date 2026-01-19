@@ -43,26 +43,28 @@ gleam add cquill
 
 ```gleam
 import cquill/schema
+import cquill/schema/field
 import cquill/query
-import cquill/repo
 import cquill/adapter/postgres
 
 pub fn main() {
   // Define your schema
   let user_schema = schema.new("users")
-    |> schema.field("id", schema.int())
-    |> schema.field("email", schema.string())
-    |> schema.field("name", schema.optional(schema.string()))
+    |> schema.add_field(field.integer("id") |> field.primary_key())
+    |> schema.add_field(field.string("email") |> field.not_null())
+    |> schema.add_field(field.string("name") |> field.nullable())
+    |> schema.add_field(field.boolean("active") |> field.not_null())
+    |> schema.add_field(field.datetime("created_at") |> field.not_null())
 
   // Build a query
   let active_users = query.from(user_schema)
     |> query.where(query.eq("active", True))
-    |> query.order_by("created_at", query.Desc)
+    |> query.order_by_desc("created_at")
     |> query.limit(10)
 
-  // Execute via repo
+  // Execute via adapter
   use pool <- result.try(postgres.connect(config))
-  repo.all(pool, active_users)
+  adapter.query(postgres.adapter(), pool, compiled_query)
 }
 ```
 
