@@ -100,18 +100,27 @@ let upsert =
 
 ```gleam
 import cquill/query
-import cquill/repo
+import cquill/schema
+import cquill/schema/field
 
-let users_query = query.from("users")
+// Define your schema
+let user_schema = schema.new("users")
+  |> schema.add_field(field.integer("id") |> field.primary_key())
+  |> schema.add_field(field.string("email") |> field.not_null())
+  |> schema.add_field(field.string("name"))
+  |> schema.add_field(field.boolean("active") |> field.not_null())
 
-case repo.all(adapter, users_query) {
+// Build the query
+let users_query = query.from(user_schema)
+
+// Execute using the adapter
+case adapter.query(postgres_adapter, pool, compiled_query) {
   Ok(rows) -> {
     list.each(rows, fn(row) {
-      let email = dict.get(row, "email")
-      io.println("User: " <> string.inspect(email))
+      io.println("User: " <> string.inspect(row))
     })
   }
-  Error(e) -> io.println("Query failed: " <> error.format(e))
+  Error(e) -> io.println("Query failed: " <> error.format_error(e))
 }
 ```
 
@@ -119,13 +128,12 @@ case repo.all(adapter, users_query) {
 
 ```gleam
 let user_query =
-  query.from("users")
-  |> query.where(query.eq("id", ast.IntValue(1)))
+  query.from(user_schema)
+  |> query.where(query.eq_int("id", 1))
 
-case repo.one(adapter, user_query) {
+case adapter.query_one(postgres_adapter, pool, compiled_query) {
   Ok(row) -> {
-    let name = dict.get(row, "name")
-    io.println("Found: " <> string.inspect(name))
+    io.println("Found: " <> string.inspect(row))
   }
   Error(error.NotFound) -> {
     io.println("User not found")
@@ -133,7 +141,7 @@ case repo.one(adapter, user_query) {
   Error(error.TooManyRows(expected, got)) -> {
     io.println("Expected 1, found " <> int.to_string(got))
   }
-  Error(e) -> io.println("Query failed: " <> error.format(e))
+  Error(e) -> io.println("Query failed: " <> error.format_error(e))
 }
 ```
 
@@ -142,26 +150,26 @@ case repo.one(adapter, user_query) {
 ```gleam
 // Active users only
 let active_users =
-  query.from("users")
-  |> query.where(query.eq("active", ast.BoolValue(True)))
+  query.from(user_schema)
+  |> query.where(query.eq("active", True))
 
 // Users by role
 let admins =
-  query.from("users")
-  |> query.where(query.eq("role", ast.StringValue("admin")))
+  query.from(user_schema)
+  |> query.where(query.eq_string("role", "admin"))
 
-// Combined filters
+// Combined filters (multiple where = AND)
 let active_admins =
-  query.from("users")
-  |> query.where(query.eq("active", ast.BoolValue(True)))
-  |> query.where(query.eq("role", ast.StringValue("admin")))
+  query.from(user_schema)
+  |> query.where(query.eq("active", True))
+  |> query.where(query.eq_string("role", "admin"))
 
 // OR conditions
 let special_users =
-  query.from("users")
-  |> query.where(query.or_where([
-    query.eq("role", ast.StringValue("admin")),
-    query.eq("role", ast.StringValue("moderator")),
+  query.from(user_schema)
+  |> query.where(query.or([
+    query.eq_string("role", "admin"),
+    query.eq_string("role", "moderator"),
   ]))
 ```
 
@@ -170,16 +178,22 @@ let special_users =
 ```gleam
 // Newest first, limit 10
 let recent_users =
-  query.from("users")
+  query.from(user_schema)
   |> query.order_by_desc("created_at")
   |> query.limit(10)
 
-// Paginated
+// Paginated using limit/offset
 let page_2 =
-  query.from("users")
+  query.from(user_schema)
   |> query.order_by_asc("id")
   |> query.limit(20)
   |> query.offset(20)  // Skip first 20
+
+// Paginated using the helper
+let page_3 =
+  query.from(user_schema)
+  |> query.order_by_asc("id")
+  |> query.paginate(page: 3, per_page: 20)
 ```
 
 ### Select Specific Columns
@@ -187,9 +201,9 @@ let page_2 =
 ```gleam
 // Only fetch needed columns
 let user_names =
-  query.from("users")
+  query.from(user_schema)
   |> query.select(["id", "name"])
-  |> query.where(query.eq("active", ast.BoolValue(True)))
+  |> query.where(query.eq("active", True))
 ```
 
 ## Update
@@ -342,59 +356,41 @@ repo.transaction(adapter, fn(tx) {
 Create reusable CRUD functions:
 
 ```gleam
-// Generic insert helper
-pub fn insert_one(adapter, table: String, data: Dict(String, ast.Value)) {
-  let columns = dict.keys(data)
-  let values = dict.values(data) |> list.map(fn(v) { [v] })
+import cquill/query
+import cquill/query/ast
 
-  let insert =
-    ast.new_insert(table)
-    |> ast.insert_columns(columns)
-    |> ast.insert_values(values)
-    |> ast.returning(["id"])
-
-  repo.insert(adapter, insert)
-  |> result.map(fn(rows) {
-    case list.first(rows) {
-      Ok(row) -> dict.get(row, "id")
-      Error(_) -> Error(Nil)
-    }
-  })
+// Generic find by ID using table name
+pub fn find_by_id(table: String, id: Int) {
+  query.from_table(table)
+  |> query.where(query.eq_int("id", id))
 }
 
-// Generic find by ID
-pub fn find_by_id(adapter, table: String, id: Int) {
-  let query =
-    query.from(table)
-    |> query.where(query.eq("id", ast.IntValue(id)))
-
-  repo.one(adapter, query)
+// Find by ID using schema (preferred for type safety)
+pub fn find_by_id_schema(schema: schema.Schema, id: Int) {
+  query.from(schema)
+  |> query.where(query.eq_int("id", id))
 }
 
-// Generic update by ID
-pub fn update_by_id(
-  adapter,
-  table: String,
-  id: Int,
-  updates: List(#(String, ast.Value)),
-) {
-  let update =
-    list.fold(updates, ast.new_update(table), fn(q, pair) {
-      let #(column, value) = pair
-      ast.set(q, column, value)
-    })
-    |> ast.update_where(query.eq("id", ast.IntValue(id)))
-
-  repo.update(adapter, update)
+// Build an update query by ID
+pub fn update_by_id(table: String, id: Int) {
+  ast.new_update(table)
+  |> ast.update_where(query.eq_int("id", id))
 }
 
-// Generic delete by ID
-pub fn delete_by_id(adapter, table: String, id: Int) {
-  let delete =
-    ast.new_delete(table)
-    |> ast.delete_where(query.eq("id", ast.IntValue(id)))
+// Build a delete query by ID
+pub fn delete_by_id(table: String, id: Int) {
+  ast.new_delete(table)
+  |> ast.delete_where(query.eq_int("id", id))
+}
 
-  repo.delete(adapter, delete)
+// Reusable filter for active records
+pub fn active_only(q) {
+  q |> query.where(query.eq("active", True))
+}
+
+// Reusable pagination
+pub fn with_pagination(q, page: Int, per_page: Int) {
+  q |> query.paginate(page: page, per_page: per_page)
 }
 ```
 
