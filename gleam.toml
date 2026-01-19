@@ -2,10 +2,13 @@ name = "cquill"
 version = "0.1.0"
 target = "erlang"
 
-description = "A compile-time safe database library for Gleam"
+description = "A compile-time safe database library for Gleam - Ecto-inspired schemas, composable queries, and adapter-based persistence"
 licences = ["Apache-2.0"]
 repository = { type = "github", user = "justin4957", repo = "cquill" }
-links = [{ title = "Documentation", href = "https://hexdocs.pm/cquill" }]
+links = [
+  { title = "Documentation", href = "https://hexdocs.pm/cquill" },
+  { title = "GitHub", href = "https://github.com/justin4957/cquill" },
+]
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
