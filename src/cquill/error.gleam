@@ -10,7 +10,9 @@
 // 4. Recoverable flag - errors indicate if retry might help
 
 import gleam/int
+import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
 
 // ============================================================================
@@ -437,27 +439,7 @@ pub fn from_mysql_error(code: Int, message: String) -> AdapterError {
 pub fn from_sqlite_error(code: Int, message: String) -> AdapterError {
   case code {
     // Constraint violations (SQLITE_CONSTRAINT = 19)
-    19 -> {
-      // Need to parse message for constraint type
-      case string.contains(string.lowercase(message), "unique") {
-        True -> UniqueViolation(extract_constraint_name(message), message)
-        False ->
-          case string.contains(string.lowercase(message), "foreign key") {
-            True ->
-              ForeignKeyViolation(extract_constraint_name(message), message)
-            False ->
-              case string.contains(string.lowercase(message), "not null") {
-                True -> NotNullViolation(extract_column_name(message))
-                False ->
-                  case string.contains(string.lowercase(message), "check") {
-                    True ->
-                      CheckViolation(extract_constraint_name(message), message)
-                    False -> ConstraintViolation("unknown", message)
-                  }
-              }
-          }
-      }
-    }
+    19 -> classify_sqlite_constraint(message)
 
     // SQLITE_BUSY (5) - database is locked
     5 -> ConnectionFailed("Database is locked")
@@ -479,6 +461,35 @@ pub fn from_sqlite_error(code: Int, message: String) -> AdapterError {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// Classify a SQLite constraint violation based on the error message.
+///
+/// SQLite's SQLITE_CONSTRAINT error (code 19) requires parsing the error
+/// message to determine the specific constraint type. This function uses
+/// a declarative approach with a list of patterns for better readability.
+fn classify_sqlite_constraint(message: String) -> AdapterError {
+  let lower_message = string.lowercase(message)
+
+  // Define constraint patterns and their corresponding error constructors
+  // Order matters: more specific patterns should come first
+  let constraint_patterns = [
+    #("unique", fn(msg: String) {
+      UniqueViolation(extract_constraint_name(msg), msg)
+    }),
+    #("foreign key", fn(msg: String) {
+      ForeignKeyViolation(extract_constraint_name(msg), msg)
+    }),
+    #("not null", fn(msg: String) { NotNullViolation(extract_column_name(msg)) }),
+    #("check", fn(msg: String) {
+      CheckViolation(extract_constraint_name(msg), msg)
+    }),
+  ]
+
+  constraint_patterns
+  |> list.find(fn(pattern) { string.contains(lower_message, pattern.0) })
+  |> result.map(fn(pattern) { pattern.1(message) })
+  |> result.unwrap(ConstraintViolation("unknown", message))
+}
 
 /// Extract constraint name from error detail/message
 fn extract_constraint_name(text: String) -> String {
