@@ -59,12 +59,14 @@ jobs:
           fi
 
   # ============================================================================
-  # Test Suite
+  # Test Suite (Unit tests only - no PostgreSQL required)
   # ============================================================================
   test:
     name: Test
     runs-on: ubuntu-latest
     needs: code-quality
+    env:
+      SKIP_POSTGRES_TESTS: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -182,6 +184,8 @@ jobs:
     name: Compatibility (${{ matrix.gleam }} / OTP ${{ matrix.otp }})
     runs-on: ubuntu-latest
     needs: [test, build]
+    env:
+      SKIP_POSTGRES_TESTS: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -220,6 +224,72 @@ jobs:
         run: gleam deps download
 
       - name: Run tests
+        run: gleam test
+
+  # ============================================================================
+  # PostgreSQL Integration Tests
+  # ============================================================================
+  postgres-integration:
+    name: PostgreSQL Integration (PG ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_USER: cquill_test
+          POSTGRES_PASSWORD: cquill_test
+          POSTGRES_DB: cquill_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://cquill_test:cquill_test@localhost:5432/cquill_test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gleam
+            build
+          key: ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-pg-${{ matrix.postgres }}-${{ hashFiles('gleam.toml', 'manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-${{ env.GLEAM_VERSION }}-pg-
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Clean build artifacts
+        run: |
+          # Ensure FFI modules are recompiled
+          rm -rf build/dev/erlang/cquill/_gleam_artefacts/*.beam 2>/dev/null || true
+
+      - name: Initialize test database
+        run: |
+          PGPASSWORD=cquill_test psql -h localhost -U cquill_test -d cquill_test -f scripts/init-test-db.sql
+
+      - name: Run PostgreSQL integration tests
+        run: gleam test test/integration
+
+      - name: Run all tests (including integration)
         run: gleam test
 
   # ============================================================================
@@ -266,7 +336,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [code-quality, test, build, docs, compatibility, security]
+    needs: [code-quality, test, build, docs, compatibility, postgres-integration, security]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -289,6 +359,10 @@ jobs:
           fi
           if [ "${{ needs.compatibility.result }}" != "success" ]; then
             echo "Compatibility tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.postgres-integration.result }}" != "success" ]; then
+            echo "PostgreSQL integration tests failed"
             exit 1
           fi
           if [ "${{ needs.security.result }}" != "success" ]; then

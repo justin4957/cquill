@@ -21,6 +21,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
+import gleam/string
 import pog
 
 // ============================================================================
@@ -200,7 +201,11 @@ pub fn named_connection(name: Name(pog.Message)) -> PostgresConnection {
 fn map_query_error(err: pog.QueryError) -> AdapterError {
   case err {
     pog.ConstraintViolated(message, constraint, detail) ->
-      error.from_postgres_error(constraint_to_code(constraint), message, detail)
+      error.from_postgres_error(
+        infer_constraint_code(constraint, detail),
+        message,
+        detail,
+      )
 
     pog.PostgresqlError(code, _name, message) ->
       error.from_postgres_error(code, message, "")
@@ -235,17 +240,62 @@ fn map_query_error(err: pog.QueryError) -> AdapterError {
   }
 }
 
-/// Map constraint name patterns to PostgreSQL error codes
-fn constraint_to_code(constraint: String) -> String {
-  // The constraint field from ConstraintViolated contains the constraint name,
-  // but we need to infer the type. This is a simplification - pog already
-  // parsed the constraint type for us in most cases.
-  case constraint {
-    "unique_violation" -> "23505"
-    "foreign_key_violation" -> "23503"
-    "not_null_violation" -> "23502"
-    "check_violation" -> "23514"
-    _ -> "23000"
+/// Infer PostgreSQL error code from constraint name and detail string
+///
+/// Since pog's ConstraintViolated doesn't include the PostgreSQL error code,
+/// we infer the constraint type from:
+/// 1. The detail string patterns (most reliable)
+/// 2. Common constraint naming conventions
+fn infer_constraint_code(constraint: String, detail: String) -> String {
+  let detail_lower = string.lowercase(detail)
+  let constraint_lower = string.lowercase(constraint)
+
+  // First, check detail string for violation type indicators (most reliable)
+  case string.contains(detail_lower, "already exists") {
+    // Unique violation: "Key (column)=(value) already exists."
+    True -> "23505"
+    False ->
+      case string.contains(detail_lower, "is not present") {
+        // Foreign key violation (insert/update): "Key (column)=(value) is not present in table"
+        True -> "23503"
+        False ->
+          case string.contains(detail_lower, "is still referenced") {
+            // Foreign key violation (delete): "Key (column)=(value) is still referenced from table"
+            True -> "23503"
+            False ->
+              // Fall back to constraint naming conventions
+              infer_from_constraint_name(constraint_lower)
+          }
+      }
+  }
+}
+
+/// Infer constraint type from common naming conventions
+fn infer_from_constraint_name(constraint_lower: String) -> String {
+  case string.contains(constraint_lower, "_pkey") {
+    True -> "23505"
+    False ->
+      case string.contains(constraint_lower, "_key") {
+        True -> "23505"
+        False ->
+          case string.contains(constraint_lower, "_unique") {
+            True -> "23505"
+            False ->
+              case string.contains(constraint_lower, "_fkey") {
+                True -> "23503"
+                False ->
+                  case string.contains(constraint_lower, "_check") {
+                    True -> "23514"
+                    False ->
+                      case string.contains(constraint_lower, "_not_null") {
+                        True -> "23502"
+                        // Default to generic integrity constraint violation
+                        False -> "23000"
+                      }
+                  }
+              }
+          }
+      }
   }
 }
 
@@ -322,80 +372,15 @@ fn execute_query(
 /// Wrap a dynamic row into a list format for consistency with adapter interface
 fn wrap_row(row: Dynamic) -> List(Dynamic) {
   // pog returns rows as tuples, we convert to list for uniform handling
-  case decode.run(row, decode.at([0], decode.dynamic)) {
-    Ok(_) -> tuple_to_list(row)
-    Error(_) -> [row]
-  }
+  // Use Erlang FFI to convert tuples to lists directly - handles any size tuple
+  // and gracefully handles non-tuples by wrapping them in a list
+  ffi_tuple_to_list(row)
 }
 
-/// Convert a tuple to a list of dynamics
-fn tuple_to_list(tuple: Dynamic) -> List(Dynamic) {
-  // Try progressively larger tuple sizes
-  case decode.run(tuple, decode_tuple2()) {
-    Ok(#(a, b)) -> [a, b]
-    Error(_) ->
-      case decode.run(tuple, decode_tuple3()) {
-        Ok(#(a, b, c)) -> [a, b, c]
-        Error(_) ->
-          case decode.run(tuple, decode_tuple4()) {
-            Ok(#(a, b, c, d)) -> [a, b, c, d]
-            Error(_) ->
-              case decode.run(tuple, decode_tuple5()) {
-                Ok(#(a, b, c, d, e)) -> [a, b, c, d, e]
-                Error(_) ->
-                  case decode.run(tuple, decode_tuple6()) {
-                    Ok(#(a, b, c, d, e, f)) -> [a, b, c, d, e, f]
-                    Error(_) -> [tuple]
-                  }
-              }
-          }
-      }
-  }
-}
-
-fn decode_tuple2() -> decode.Decoder(#(Dynamic, Dynamic)) {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  decode.success(#(a, b))
-}
-
-fn decode_tuple3() -> decode.Decoder(#(Dynamic, Dynamic, Dynamic)) {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  use c <- decode.field(2, decode.dynamic)
-  decode.success(#(a, b, c))
-}
-
-fn decode_tuple4() -> decode.Decoder(#(Dynamic, Dynamic, Dynamic, Dynamic)) {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  use c <- decode.field(2, decode.dynamic)
-  use d <- decode.field(3, decode.dynamic)
-  decode.success(#(a, b, c, d))
-}
-
-fn decode_tuple5() -> decode.Decoder(
-  #(Dynamic, Dynamic, Dynamic, Dynamic, Dynamic),
-) {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  use c <- decode.field(2, decode.dynamic)
-  use d <- decode.field(3, decode.dynamic)
-  use e <- decode.field(4, decode.dynamic)
-  decode.success(#(a, b, c, d, e))
-}
-
-fn decode_tuple6() -> decode.Decoder(
-  #(Dynamic, Dynamic, Dynamic, Dynamic, Dynamic, Dynamic),
-) {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  use c <- decode.field(2, decode.dynamic)
-  use d <- decode.field(3, decode.dynamic)
-  use e <- decode.field(4, decode.dynamic)
-  use f <- decode.field(5, decode.dynamic)
-  decode.success(#(a, b, c, d, e, f))
-}
+/// Convert a tuple to a list using Erlang's tuple_to_list
+/// For non-tuples, wraps the value in a single-element list
+@external(erlang, "cquill_ffi", "tuple_to_list")
+fn ffi_tuple_to_list(value: Dynamic) -> List(Dynamic)
 
 /// Execute a mutation (INSERT/UPDATE/DELETE) and return affected count
 fn execute_mutation(
@@ -742,81 +727,8 @@ pub fn execute_savepoint_with_user_error(
 fn escape_identifier(name: String) -> String {
   // Replace any double quotes with escaped double quotes
   // and wrap in double quotes for PostgreSQL identifier quoting
-  "\"" <> replace_all(name, "\"", "\"\"") <> "\""
+  "\"" <> string.replace(name, "\"", "\"\"") <> "\""
 }
-
-/// Replace all occurrences of a substring
-fn replace_all(string: String, from: String, to: String) -> String {
-  do_replace_all(string, from, to, "")
-}
-
-fn do_replace_all(
-  string: String,
-  from: String,
-  to: String,
-  acc: String,
-) -> String {
-  case string_starts_with(string, from) {
-    True -> {
-      let rest = string_drop(string, string_length(from))
-      do_replace_all(rest, from, to, acc <> to)
-    }
-    False -> {
-      case string_pop_grapheme(string) {
-        Ok(#(char, rest)) -> do_replace_all(rest, from, to, acc <> char)
-        Error(_) -> acc
-      }
-    }
-  }
-}
-
-/// Check if string starts with prefix
-fn string_starts_with(string: String, prefix: String) -> Bool {
-  string_take(string, string_length(prefix)) == prefix
-}
-
-/// Take first n graphemes from string
-fn string_take(string: String, n: Int) -> String {
-  do_string_take(string, n, "")
-}
-
-fn do_string_take(string: String, n: Int, acc: String) -> String {
-  case n <= 0 {
-    True -> acc
-    False ->
-      case string_pop_grapheme(string) {
-        Ok(#(char, rest)) -> do_string_take(rest, n - 1, acc <> char)
-        Error(_) -> acc
-      }
-  }
-}
-
-/// Drop first n graphemes from string
-fn string_drop(string: String, n: Int) -> String {
-  case n <= 0 {
-    True -> string
-    False ->
-      case string_pop_grapheme(string) {
-        Ok(#(_, rest)) -> string_drop(rest, n - 1)
-        Error(_) -> ""
-      }
-  }
-}
-
-/// Get string length in graphemes
-fn string_length(string: String) -> Int {
-  do_string_length(string, 0)
-}
-
-fn do_string_length(string: String, acc: Int) -> Int {
-  case string_pop_grapheme(string) {
-    Ok(#(_, rest)) -> do_string_length(rest, acc + 1)
-    Error(_) -> acc
-  }
-}
-
-@external(erlang, "string", "next_grapheme")
-fn string_pop_grapheme(string: String) -> Result(#(String, String), Nil)
 
 // ============================================================================
 // RAW QUERY EXECUTION (Convenience functions)
