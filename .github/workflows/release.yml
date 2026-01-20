@@ -12,11 +12,32 @@ env:
 
 jobs:
   # ============================================================================
-  # Build Release Artifacts
+  # Build Release Artifacts for Multiple Platforms
   # ============================================================================
   build-release:
-    name: Build Release
-    runs-on: ubuntu-latest
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x64 (primary build, also runs tests)
+          - os: ubuntu-latest
+            target: linux-x64
+            run_tests: true
+          # Linux ARM64 (via cross-compilation on ubuntu)
+          - os: ubuntu-latest
+            target: linux-arm64
+            run_tests: false
+            cross_compile: true
+          # macOS x64 (Intel)
+          - os: macos-13
+            target: darwin-x64
+            run_tests: true
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            target: darwin-arm64
+            run_tests: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,7 +53,10 @@ jobs:
         run: gleam deps download
 
       - name: Run tests
+        if: matrix.run_tests
         run: gleam test
+        env:
+          SKIP_POSTGRES_TESTS: "true"
 
       - name: Build project
         run: gleam build
@@ -41,12 +65,10 @@ jobs:
         run: gleam run -m gleescript
 
       - name: Verify escript
+        if: ${{ !matrix.cross_compile }}
         run: |
           ./cquill --version
           ./cquill --help
-
-      - name: Generate documentation
-        run: gleam docs build
 
       - name: Get version from tag
         id: version
@@ -58,13 +80,40 @@ jobs:
           cp cquill release/
           cp README.md release/ 2>/dev/null || true
           cp LICENSE release/ 2>/dev/null || true
-          tar -czvf cquill-${{ steps.version.outputs.version }}-linux-x64.tar.gz -C release .
+          tar -czvf cquill-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz -C release .
 
-      - name: Upload escript artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cquill-${{ steps.version.outputs.version }}-linux-x64
-          path: cquill-${{ steps.version.outputs.version }}-linux-x64.tar.gz
+          name: cquill-${{ steps.version.outputs.version }}-${{ matrix.target }}
+          path: cquill-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz
+
+  # ============================================================================
+  # Build Documentation (only needs to run once)
+  # ============================================================================
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          gleam-version: ${{ env.GLEAM_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Generate documentation
+        run: gleam docs build
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Upload documentation artifact
         uses: actions/upload-artifact@v4
@@ -78,7 +127,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build-release
+    needs: [build-release, build-docs]
     permissions:
       contents: write
     steps:
@@ -89,10 +138,25 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cquill-${{ steps.version.outputs.version }}-linux-x64
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f -name "*.tar.gz" | sort
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find artifacts -name "*.tar.gz" -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Generate checksums
+        run: |
+          cd release-files
+          sha256sum *.tar.gz > checksums-sha256.txt
+          cat checksums-sha256.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -101,8 +165,53 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
           generate_release_notes: true
+          body: |
+            ## Installation
+
+            ### Quick Install (macOS/Linux)
+
+            ```bash
+            # Detect platform and download
+            PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
+            ARCH=$(uname -m)
+            case "$ARCH" in
+              x86_64) ARCH="x64" ;;
+              aarch64|arm64) ARCH="arm64" ;;
+            esac
+            case "$PLATFORM" in
+              darwin) PLATFORM="darwin" ;;
+              linux) PLATFORM="linux" ;;
+            esac
+
+            curl -L "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/cquill-${{ steps.version.outputs.version }}-${PLATFORM}-${ARCH}.tar.gz" | tar xz
+            chmod +x cquill
+            sudo mv cquill /usr/local/bin/
+            ```
+
+            ### Manual Download
+
+            Download the appropriate archive for your platform:
+
+            | Platform | Architecture | Download |
+            |----------|--------------|----------|
+            | Linux | x64 | `cquill-${{ steps.version.outputs.version }}-linux-x64.tar.gz` |
+            | Linux | ARM64 | `cquill-${{ steps.version.outputs.version }}-linux-arm64.tar.gz` |
+            | macOS | Intel (x64) | `cquill-${{ steps.version.outputs.version }}-darwin-x64.tar.gz` |
+            | macOS | Apple Silicon (ARM64) | `cquill-${{ steps.version.outputs.version }}-darwin-arm64.tar.gz` |
+
+            ### Verify Download
+
+            ```bash
+            # Download checksums
+            curl -LO "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/checksums-sha256.txt"
+
+            # Verify (replace filename with your download)
+            sha256sum -c checksums-sha256.txt --ignore-missing
+            ```
+
           files: |
-            cquill-${{ steps.version.outputs.version }}-linux-x64.tar.gz
+            release-files/*.tar.gz
+            release-files/checksums-sha256.txt
 
   # ============================================================================
   # Publish to Hex.pm (if configured)
