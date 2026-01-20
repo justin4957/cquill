@@ -1,0 +1,39 @@
+# Docker Compose for cquill local development and testing
+#
+# Usage:
+#   docker-compose up -d        # Start PostgreSQL
+#   docker-compose down         # Stop and remove containers
+#   docker-compose down -v      # Stop and remove containers + volumes (clean slate)
+#
+# The test database will be available at:
+#   Host: localhost
+#   Port: 5432
+#   Database: cquill_test
+#   User: cquill_test
+#   Password: cquill_test
+#
+# Connection URL:
+#   postgresql://cquill_test:cquill_test@localhost:5432/cquill_test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cquill_postgres
+    environment:
+      POSTGRES_USER: cquill_test
+      POSTGRES_PASSWORD: cquill_test
+      POSTGRES_DB: cquill_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cquill_test -d cquill_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
