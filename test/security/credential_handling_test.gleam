@@ -6,7 +6,7 @@
 import cquill/error
 import cquill/query/ast
 import cquill/telemetry
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleam/string
 import gleeunit/should
 
