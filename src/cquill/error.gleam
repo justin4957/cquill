@@ -243,8 +243,116 @@ pub fn is_query_error(error: AdapterError) -> Bool {
 // ERROR FORMATTING
 // ============================================================================
 
-/// Format an error for display
+/// Format an error for display with clear, actionable messages.
+///
+/// ## Example
+///
+/// ```gleam
+/// let error = UniqueViolation("users_email_key", "Key (email)=(test@example.com) already exists")
+/// format_error(error)
+/// // -> "Unique constraint violation on users_email_key\n  Key (email)=(test@example.com) already exists\n\nHint: Check if a record with this value exists before inserting,\n      or use an upsert operation for insert-or-update semantics."
+/// ```
 pub fn format_error(error: AdapterError) -> String {
+  case error {
+    NotFound ->
+      "Record not found\n\nHint: Verify the record exists before querying, or use get_by which returns Option."
+
+    TooManyRows(expected, got) ->
+      "Too many rows returned: expected "
+      <> int.to_string(expected)
+      <> ", got "
+      <> int.to_string(got)
+      <> "\n\nHint: Add more specific conditions to your query, or use get_all instead of get_one."
+
+    ConnectionFailed(reason) ->
+      "Connection failed: "
+      <> sanitize_connection_message(reason)
+      <> "\n\nHint: Check that the database server is running and accessible."
+
+    ConnectionTimeout ->
+      "Connection timed out\n\nHint: The database server may be overloaded or unreachable. Check network connectivity and server status."
+
+    PoolExhausted ->
+      "Connection pool exhausted: all connections are in use\n\nHint: Increase the pool size, reduce long-running queries, or check for connection leaks."
+
+    ConnectionLost(reason) ->
+      "Connection lost: "
+      <> sanitize_connection_message(reason)
+      <> "\n\nHint: The database connection was interrupted. This operation can be retried."
+
+    QueryFailed(message, None) -> "Query failed: " <> message
+    QueryFailed(message, Some(code)) ->
+      "Query failed [" <> code <> "]: " <> message
+
+    DecodeFailed(row, column, expected, got) ->
+      "Decode failed at row "
+      <> int.to_string(row)
+      <> ", column '"
+      <> column
+      <> "': expected type "
+      <> expected
+      <> ", got "
+      <> got
+      <> "\n\nHint: Check that the column type in your schema matches the database column type."
+
+    Timeout ->
+      "Operation timed out\n\nHint: Consider adding an index, optimizing the query, or increasing the timeout limit."
+
+    UniqueViolation(constraint, detail) ->
+      "Unique constraint violation on "
+      <> constraint
+      <> "\n  "
+      <> detail
+      <> "\n\nHint: Check if a record with this value exists before inserting,\n      or use an upsert operation for insert-or-update semantics."
+
+    ForeignKeyViolation(constraint, detail) ->
+      "Foreign key violation on "
+      <> constraint
+      <> "\n  "
+      <> detail
+      <> "\n\nHint: Ensure the referenced record exists before creating this record,\n      or check that you're not deleting a record that others depend on."
+
+    CheckViolation(constraint, detail) ->
+      "Check constraint violation on "
+      <> constraint
+      <> "\n  "
+      <> detail
+      <> "\n\nHint: Verify that the value meets the constraint requirements defined in the database."
+
+    NotNullViolation(column) ->
+      "NOT NULL violation on column '"
+      <> column
+      <> "'\n\nHint: Provide a value for this required field, or update the schema to allow NULL."
+
+    ConstraintViolation(constraint, detail) ->
+      "Constraint violation on " <> constraint <> "\n  " <> detail
+
+    StaleData(expected, actual) ->
+      "Stale data detected: expected version "
+      <> expected
+      <> ", found version "
+      <> actual
+      <> "\n\nHint: The record was modified by another process. Reload the data and retry your operation."
+
+    DataIntegrityError(message) ->
+      "Data integrity error: "
+      <> message
+      <> "\n\nHint: Check that your data meets all schema requirements and constraints."
+
+    NotSupported(operation) ->
+      "Operation not supported: "
+      <> operation
+      <> "\n\nHint: This operation is not available with the current adapter."
+
+    AdapterSpecific(code, message) ->
+      "Adapter error [" <> code <> "]: " <> message
+  }
+}
+
+/// Format an error for display without hints (compact format).
+///
+/// Use this for logging or when hints are not needed.
+pub fn format_error_compact(error: AdapterError) -> String {
   case error {
     NotFound -> "Record not found"
     TooManyRows(expected, got) ->
@@ -253,10 +361,12 @@ pub fn format_error(error: AdapterError) -> String {
       <> ", got "
       <> int.to_string(got)
 
-    ConnectionFailed(reason) -> "Connection failed: " <> reason
+    ConnectionFailed(reason) ->
+      "Connection failed: " <> sanitize_connection_message(reason)
     ConnectionTimeout -> "Connection timed out"
     PoolExhausted -> "Connection pool exhausted"
-    ConnectionLost(reason) -> "Connection lost: " <> reason
+    ConnectionLost(reason) ->
+      "Connection lost: " <> sanitize_connection_message(reason)
 
     QueryFailed(message, None) -> "Query failed: " <> message
     QueryFailed(message, Some(code)) ->
@@ -264,9 +374,9 @@ pub fn format_error(error: AdapterError) -> String {
     DecodeFailed(row, column, expected, got) ->
       "Decode failed at row "
       <> int.to_string(row)
-      <> ", column "
+      <> ", column '"
       <> column
-      <> ": expected "
+      <> "': expected "
       <> expected
       <> ", got "
       <> got
@@ -293,12 +403,72 @@ pub fn format_error(error: AdapterError) -> String {
   }
 }
 
-/// Format a transaction error for display
+/// Sanitize connection messages to prevent leaking sensitive information.
+///
+/// Removes potential passwords, connection strings, and other secrets.
+fn sanitize_connection_message(message: String) -> String {
+  let lower = string.lowercase(message)
+  // Check for sensitive patterns and redact if found
+  case
+    string.contains(lower, "password")
+    || string.contains(lower, "pwd=")
+    || string.contains(lower, "postgres://")
+    || string.contains(lower, "mysql://")
+    || string.contains(lower, "secret")
+    || string.contains(lower, "api_key")
+  {
+    True -> "[connection details redacted]"
+    False -> message
+  }
+}
+
+/// Format a transaction error for display with actionable hints.
 pub fn format_transaction_error(error: TransactionError(e)) -> String {
+  case error {
+    UserError(_) ->
+      "Transaction aborted: user error\n\nHint: Your transaction callback returned an error. The transaction has been rolled back."
+
+    AdapterTransactionError(adapter_err) ->
+      "Transaction aborted: " <> format_error_compact(adapter_err)
+
+    BeginFailed(reason) ->
+      "Failed to begin transaction: "
+      <> reason
+      <> "\n\nHint: Check database connection and permissions."
+
+    CommitFailed(reason) ->
+      "Failed to commit transaction: "
+      <> reason
+      <> "\n\nHint: The transaction may have been rolled back. Check for constraint violations or connection issues."
+
+    RolledBack ->
+      "Transaction was rolled back\n\nHint: An explicit rollback was requested during the transaction."
+
+    TransactionRollback(reason) ->
+      "Transaction rolled back: "
+      <> reason
+      <> "\n\nHint: The transaction was explicitly rolled back with the reason above."
+
+    TransactionConnectionLost ->
+      "Connection lost during transaction\n\nHint: The database connection was interrupted. The transaction state is unknown - verify data integrity."
+
+    NestedTransactionError ->
+      "Nested transactions are not supported\n\nHint: Use savepoints for partial rollback within a transaction instead."
+
+    TransactionTimeout ->
+      "Transaction timed out\n\nHint: Consider breaking up long transactions or increasing the timeout limit."
+
+    SerializationFailure ->
+      "Serialization failure: concurrent transaction conflict\n\nHint: This operation can be safely retried. Another transaction modified the same data."
+  }
+}
+
+/// Format a transaction error without hints (compact format).
+pub fn format_transaction_error_compact(error: TransactionError(e)) -> String {
   case error {
     UserError(_) -> "Transaction aborted: user error"
     AdapterTransactionError(adapter_err) ->
-      "Transaction aborted: " <> format_error(adapter_err)
+      "Transaction aborted: " <> format_error_compact(adapter_err)
     BeginFailed(reason) -> "Failed to begin transaction: " <> reason
     CommitFailed(reason) -> "Failed to commit transaction: " <> reason
     RolledBack -> "Transaction was rolled back"
@@ -307,16 +477,45 @@ pub fn format_transaction_error(error: TransactionError(e)) -> String {
     NestedTransactionError -> "Nested transactions are not supported"
     TransactionTimeout -> "Transaction timed out"
     SerializationFailure ->
-      "Serialization failure: concurrent transaction conflict (retry may succeed)"
+      "Serialization failure: concurrent transaction conflict"
   }
 }
 
-/// Format a savepoint error for display
+/// Format a savepoint error for display with actionable hints.
 pub fn format_savepoint_error(error: SavepointError(e)) -> String {
+  case error {
+    SavepointNotFound(name) ->
+      "Savepoint not found: '"
+      <> name
+      <> "'\n\nHint: Verify the savepoint name and that it was created in the current transaction."
+
+    SavepointAdapterError(adapter_err) ->
+      "Savepoint operation failed: " <> format_error_compact(adapter_err)
+
+    SavepointUserError(_) ->
+      "Savepoint aborted: user error\n\nHint: The savepoint callback returned an error. The savepoint has been rolled back."
+
+    SavepointCreationFailed(reason) ->
+      "Failed to create savepoint: "
+      <> reason
+      <> "\n\nHint: Check that you are within an active transaction."
+
+    SavepointReleaseFailed(reason) ->
+      "Failed to release savepoint: "
+      <> reason
+      <> "\n\nHint: The savepoint may have already been released or rolled back."
+
+    SavepointNoTransaction ->
+      "Cannot use savepoint outside of a transaction\n\nHint: Savepoints must be created within an active transaction. Use repo.transaction first."
+  }
+}
+
+/// Format a savepoint error without hints (compact format).
+pub fn format_savepoint_error_compact(error: SavepointError(e)) -> String {
   case error {
     SavepointNotFound(name) -> "Savepoint not found: " <> name
     SavepointAdapterError(adapter_err) ->
-      "Savepoint operation failed: " <> format_error(adapter_err)
+      "Savepoint operation failed: " <> format_error_compact(adapter_err)
     SavepointUserError(_) -> "Savepoint aborted: user error"
     SavepointCreationFailed(reason) -> "Failed to create savepoint: " <> reason
     SavepointReleaseFailed(reason) -> "Failed to release savepoint: " <> reason

@@ -468,7 +468,7 @@ pub fn savepoint_names_returns_empty_list_initially_test() {
 pub fn format_savepoint_not_found_error_test() {
   let err: error.SavepointError(Nil) = error.SavepointNotFound("my_savepoint")
 
-  error.format_savepoint_error(err)
+  error.format_savepoint_error_compact(err)
   |> should.equal("Savepoint not found: my_savepoint")
 }
 
@@ -476,7 +476,7 @@ pub fn format_savepoint_creation_failed_error_test() {
   let err: error.SavepointError(Nil) =
     error.SavepointCreationFailed("Database error")
 
-  error.format_savepoint_error(err)
+  error.format_savepoint_error_compact(err)
   |> should.equal("Failed to create savepoint: Database error")
 }
 
@@ -484,20 +484,20 @@ pub fn format_savepoint_release_failed_error_test() {
   let err: error.SavepointError(Nil) =
     error.SavepointReleaseFailed("Release error")
 
-  error.format_savepoint_error(err)
+  error.format_savepoint_error_compact(err)
   |> should.equal("Failed to release savepoint: Release error")
 }
 
 pub fn format_savepoint_no_transaction_error_test() {
   let err: error.SavepointError(Nil) = error.SavepointNoTransaction
 
-  error.format_savepoint_error(err)
+  error.format_savepoint_error_compact(err)
   |> should.equal("Cannot use savepoint outside of a transaction")
 }
 
 pub fn format_savepoint_user_error_test() {
   let err: error.SavepointError(String) = error.SavepointUserError("user error")
 
-  error.format_savepoint_error(err)
+  error.format_savepoint_error_compact(err)
   |> should.equal("Savepoint aborted: user error")
 }

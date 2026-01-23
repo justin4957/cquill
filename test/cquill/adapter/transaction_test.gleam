@@ -317,7 +317,7 @@ pub fn adapter_transaction_error_wraps_constraint_violation_test() {
 pub fn format_transaction_error_user_error_test() {
   let err: error.TransactionError(String) = error.UserError("test error")
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Transaction aborted: user error")
 }
 
@@ -325,7 +325,7 @@ pub fn format_transaction_error_adapter_error_test() {
   let inner = error.UniqueViolation("users_email_key", "duplicate email")
   let err: error.TransactionError(Nil) = error.AdapterTransactionError(inner)
 
-  let formatted = error.format_transaction_error(err)
+  let formatted = error.format_transaction_error_compact(err)
 
   // Should include the inner error details
   formatted
@@ -337,21 +337,21 @@ pub fn format_transaction_error_begin_failed_test() {
   let err: error.TransactionError(Nil) =
     error.BeginFailed("Connection unavailable")
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Failed to begin transaction: Connection unavailable")
 }
 
 pub fn format_transaction_error_commit_failed_test() {
   let err: error.TransactionError(Nil) = error.CommitFailed("Timeout")
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Failed to commit transaction: Timeout")
 }
 
 pub fn format_transaction_error_rolled_back_test() {
   let err: error.TransactionError(Nil) = error.RolledBack
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Transaction was rolled back")
 }
 
@@ -359,36 +359,34 @@ pub fn format_transaction_error_transaction_rollback_test() {
   let err: error.TransactionError(Nil) =
     error.TransactionRollback("User requested rollback")
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Transaction rolled back: User requested rollback")
 }
 
 pub fn format_transaction_error_connection_lost_test() {
   let err: error.TransactionError(Nil) = error.TransactionConnectionLost
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Connection lost during transaction")
 }
 
 pub fn format_transaction_error_nested_test() {
   let err: error.TransactionError(Nil) = error.NestedTransactionError
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Nested transactions are not supported")
 }
 
 pub fn format_transaction_error_timeout_test() {
   let err: error.TransactionError(Nil) = error.TransactionTimeout
 
-  error.format_transaction_error(err)
+  error.format_transaction_error_compact(err)
   |> should.equal("Transaction timed out")
 }
 
 pub fn format_transaction_error_serialization_failure_test() {
   let err: error.TransactionError(Nil) = error.SerializationFailure
 
-  error.format_transaction_error(err)
-  |> should.equal(
-    "Serialization failure: concurrent transaction conflict (retry may succeed)",
-  )
+  error.format_transaction_error_compact(err)
+  |> should.equal("Serialization failure: concurrent transaction conflict")
 }
