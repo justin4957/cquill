@@ -4,6 +4,7 @@ import cquill/error.{
   QueryFailed, StaleData, Timeout, UserError,
 }
 import gleam/option.{None}
+import gleam/string
 import gleeunit
 import gleeunit/should
 
@@ -57,20 +58,31 @@ pub fn recoverable_errors_test() {
 }
 
 pub fn format_error_test() {
-  adapter.format_error(NotFound)
+  // Test compact format (for logging/simple display)
+  adapter.format_error_compact(NotFound)
   |> should.equal("Record not found")
 
-  adapter.format_error(ConstraintViolation("users_email_key", "duplicate key"))
+  adapter.format_error_compact(ConstraintViolation(
+    "users_email_key",
+    "duplicate key",
+  ))
   |> should.equal("Constraint violation: users_email_key - duplicate key")
 
-  adapter.format_error(Timeout)
+  adapter.format_error_compact(Timeout)
   |> should.equal("Operation timed out")
 
-  adapter.format_error(NotSupported("RETURNING"))
+  adapter.format_error_compact(NotSupported("RETURNING"))
   |> should.equal("Operation not supported: RETURNING")
 
-  adapter.format_error(AdapterSpecific("PG001", "Something went wrong"))
+  adapter.format_error_compact(AdapterSpecific("PG001", "Something went wrong"))
   |> should.equal("Adapter error [PG001]: Something went wrong")
+}
+
+pub fn format_error_with_hints_test() {
+  // Test detailed format with hints
+  let message = adapter.format_error(NotFound)
+  string.contains(message, "Record not found") |> should.be_true
+  string.contains(message, "Hint:") |> should.be_true
 }
 
 // ============================================================================

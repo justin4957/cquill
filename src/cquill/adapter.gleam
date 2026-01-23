@@ -64,6 +64,10 @@ pub fn format_error(err: AdapterError) -> String {
   error.format_error(err)
 }
 
+pub fn format_error_compact(err: AdapterError) -> String {
+  error.format_error_compact(err)
+}
+
 // Re-export error mapping functions as wrappers
 pub fn from_postgres_error(
   code: String,
