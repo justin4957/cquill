@@ -1,10 +1,10 @@
 import cquill/query.{
-  asc, desc, eq_bool, eq_int, eq_string, gt_int, in_ints, in_strings,
-  is_not_null, is_null, like, lt_int, lte_int, not_eq, nulls_first, nulls_last,
+  desc, eq_bool, eq_int, eq_string, gt_int, in_ints, in_strings, is_not_null,
+  is_null, like, lt_int, lte_int, not_eq, nulls_last,
 }
 import cquill/query/ast.{
-  Asc, Desc, Eq, IntValue, NullsFirst, NullsLast, Query as QueryRecord,
-  SelectAll, SelectFields, StringValue, TableSource,
+  Asc, Desc, Eq, IntValue, NullsLast, Query as QueryRecord, SelectAll,
+  SelectFields, StringValue, TableSource,
 }
 import cquill/schema
 import cquill/schema/field

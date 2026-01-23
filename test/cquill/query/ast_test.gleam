@@ -1,7 +1,7 @@
 import cquill/query/ast.{
-  type Condition, type OrderBy, type Query, type Select, type Source, type Value,
-  Asc, Desc, Eq, Gt, IntValue, NullsDefault, NullsFirst, NullsLast, OrderBy,
-  Query as QueryRecord, SelectAll, SelectFields, StringValue, TableSource,
+  type Condition, type OrderBy, type Select, type Source, type Value, Asc, Desc,
+  Eq, Gt, IntValue, NullsDefault, NullsFirst, NullsLast, OrderBy, SelectAll,
+  SelectFields, StringValue, TableSource,
 }
 import gleam/option.{None, Some}
 import gleeunit
@@ -52,7 +52,6 @@ pub fn int_value_test() {
   let val: Value = IntValue(42)
   case val {
     IntValue(n) -> n |> should.equal(42)
-    _ -> should.fail()
   }
 }
 
@@ -60,7 +59,6 @@ pub fn string_value_test() {
   let val: Value = StringValue("hello")
   case val {
     StringValue(s) -> s |> should.equal("hello")
-    _ -> should.fail()
   }
 }
 
@@ -71,12 +69,10 @@ pub fn value_types_are_distinct_test() {
 
   case int_val {
     IntValue(_) -> should.be_true(True)
-    _ -> should.fail()
   }
 
   case str_val {
     StringValue(_) -> should.be_true(True)
-    _ -> should.fail()
   }
 }
 
@@ -109,45 +105,35 @@ pub fn gt_condition_test() {
 }
 
 pub fn and_condition_test() {
-  let cond: Condition =
-    ast.And([Eq("active", ast.BoolValue(True)), Gt("age", IntValue(18))])
+  let conditions = [Eq("active", ast.BoolValue(True)), Gt("age", IntValue(18))]
+  let cond: Condition = ast.And(conditions)
 
-  case cond {
-    ast.And(conditions) -> {
-      conditions
-      |> list.length
-      |> should.equal(2)
-    }
-    _ -> should.fail()
-  }
+  conditions
+  |> list.length
+  |> should.equal(2)
+
+  cond |> should.equal(ast.And(conditions))
 }
 
 pub fn or_condition_test() {
-  let cond: Condition =
-    ast.Or([Eq("role", StringValue("admin")), Eq("role", StringValue("mod"))])
+  let conditions = [
+    Eq("role", StringValue("admin")),
+    Eq("role", StringValue("mod")),
+  ]
+  let cond: Condition = ast.Or(conditions)
 
-  case cond {
-    ast.Or(conditions) -> {
-      conditions
-      |> list.length
-      |> should.equal(2)
-    }
-    _ -> should.fail()
-  }
+  conditions
+  |> list.length
+  |> should.equal(2)
+
+  cond |> should.equal(ast.Or(conditions))
 }
 
 pub fn not_condition_test() {
-  let cond: Condition = ast.Not(Eq("deleted", ast.BoolValue(True)))
+  let inner = Eq("deleted", ast.BoolValue(True))
+  let cond: Condition = ast.Not(inner)
 
-  case cond {
-    ast.Not(inner) -> {
-      case inner {
-        Eq(field, _) -> field |> should.equal("deleted")
-        _ -> should.fail()
-      }
-    }
-    _ -> should.fail()
-  }
+  cond |> should.equal(ast.Not(inner))
 }
 
 // ============================================================================
@@ -179,24 +165,14 @@ pub fn order_by_with_nulls_test() {
 
 pub fn nulls_order_types_test() {
   // Verify all nulls order types are distinct
-  let default = NullsDefault
-  let first = NullsFirst
-  let last = NullsLast
+  NullsDefault |> should.equal(NullsDefault)
+  NullsFirst |> should.equal(NullsFirst)
+  NullsLast |> should.equal(NullsLast)
 
-  case default {
-    NullsDefault -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case first {
-    NullsFirst -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case last {
-    NullsLast -> should.be_true(True)
-    _ -> should.fail()
-  }
+  // Verify they're not equal to each other
+  NullsDefault |> should.not_equal(NullsFirst)
+  NullsDefault |> should.not_equal(NullsLast)
+  NullsFirst |> should.not_equal(NullsLast)
 }
 
 // ============================================================================
@@ -206,24 +182,13 @@ pub fn nulls_order_types_test() {
 pub fn select_all_test() {
   let sel: Select = SelectAll
 
-  case sel {
-    SelectAll -> should.be_true(True)
-    _ -> should.fail()
-  }
+  sel |> should.equal(SelectAll)
 }
 
 pub fn select_fields_test() {
   let sel: Select = SelectFields(["id", "name", "email"])
 
-  case sel {
-    SelectFields(fields) -> {
-      fields
-      |> list.length
-      |> should.equal(3)
-      fields |> should.equal(["id", "name", "email"])
-    }
-    _ -> should.fail()
-  }
+  sel |> should.equal(SelectFields(["id", "name", "email"]))
 }
 
 // ============================================================================
@@ -260,36 +225,17 @@ pub fn left_join_with_alias_test() {
 
 pub fn join_types_test() {
   // Verify all join types are distinct
-  let inner = ast.InnerJoin
-  let left = ast.LeftJoin
-  let right = ast.RightJoin
-  let full = ast.FullJoin
-  let cross = ast.CrossJoin
+  ast.InnerJoin |> should.equal(ast.InnerJoin)
+  ast.LeftJoin |> should.equal(ast.LeftJoin)
+  ast.RightJoin |> should.equal(ast.RightJoin)
+  ast.FullJoin |> should.equal(ast.FullJoin)
+  ast.CrossJoin |> should.equal(ast.CrossJoin)
 
-  case inner {
-    ast.InnerJoin -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case left {
-    ast.LeftJoin -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case right {
-    ast.RightJoin -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case full {
-    ast.FullJoin -> should.be_true(True)
-    _ -> should.fail()
-  }
-
-  case cross {
-    ast.CrossJoin -> should.be_true(True)
-    _ -> should.fail()
-  }
+  // Verify they're not equal to each other
+  ast.InnerJoin |> should.not_equal(ast.LeftJoin)
+  ast.InnerJoin |> should.not_equal(ast.RightJoin)
+  ast.InnerJoin |> should.not_equal(ast.FullJoin)
+  ast.InnerJoin |> should.not_equal(ast.CrossJoin)
 }
 
 // ============================================================================

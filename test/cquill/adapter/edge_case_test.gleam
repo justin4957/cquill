@@ -410,7 +410,7 @@ pub fn insert_very_long_string_test() {
         Ok(retrieved) -> {
           // Verify length is preserved
           case retrieved {
-            [_, content] -> {
+            [_, _content] -> {
               // Content should match the original long string
               should.be_true(True)
             }

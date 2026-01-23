@@ -1,7 +1,7 @@
 import cquill/adapter
 import cquill/error.{
   AdapterSpecific, ConnectionFailed, ConstraintViolation, NotFound, NotSupported,
-  QueryFailed, StaleData, Timeout, UserError,
+  QueryFailed, StaleData, Timeout,
 }
 import gleam/option.{None}
 import gleam/string

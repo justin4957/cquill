@@ -7,7 +7,6 @@ import bench/bench
 import cquill/schema
 import cquill/schema/field
 import gleam/io
-import gleam/list
 import gleam/string
 
 // ============================================================================

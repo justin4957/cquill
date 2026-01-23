@@ -4,9 +4,9 @@
 // particularly the SQLite constraint classification.
 
 import cquill/error.{
-  type AdapterError, AdapterSpecific, CheckViolation, ConnectionFailed,
-  ConstraintViolation, ForeignKeyViolation, NotNullViolation, QueryFailed,
-  UniqueViolation, from_sqlite_error,
+  AdapterSpecific, CheckViolation, ConnectionFailed, ConstraintViolation,
+  ForeignKeyViolation, NotNullViolation, QueryFailed, UniqueViolation,
+  from_sqlite_error,
 }
 import gleam/option.{Some}
 import gleeunit/should

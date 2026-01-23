@@ -11,7 +11,6 @@ import gleam/dynamic.{type Dynamic}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/string
 
 // ============================================================================
 // FIELD TYPES

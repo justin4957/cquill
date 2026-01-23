@@ -713,7 +713,7 @@ fn format_params(
 ) -> String {
   let formatted =
     params
-    |> list.index_map(fn(param, index) {
+    |> list.index_map(fn(param, _index) {
       // Check if this parameter position should be masked
       // In practice, we can't know the field name from position alone,
       // so we mask based on value patterns (e.g., long strings that look like tokens)

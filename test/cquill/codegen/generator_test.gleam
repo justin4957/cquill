@@ -4,11 +4,11 @@
 // Gleam source files from introspected schema metadata.
 
 import cquill/codegen/generator.{
-  type GeneratedModule, type GeneratorConfig, GeneratedModule, GeneratorConfig,
-  default_config, generate_all, generate_enum_module, generate_index_module,
-  generate_schema_module, generate_typed_index_module, generate_typed_module,
-  module_file_path, pascal_case, snake_case, with_module_prefix,
-  with_timestamp_fields, with_typed_columns,
+  GeneratedModule, GeneratorConfig, default_config, generate_all,
+  generate_enum_module, generate_index_module, generate_schema_module,
+  generate_typed_index_module, generate_typed_module, module_file_path,
+  pascal_case, snake_case, with_module_prefix, with_timestamp_fields,
+  with_typed_columns,
 }
 import cquill/introspection.{
   type IntrospectedEnum, type IntrospectedTable, IntrospectedColumn,

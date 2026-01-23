@@ -145,7 +145,6 @@ pub fn parse(args: List(String)) -> Result(Command, ParseError) {
     ["--help"] | ["-h"] | ["help"] -> Ok(Help)
     ["--version"] | ["-V"] | ["version"] -> Ok(Version)
     ["generate", ..rest] -> parse_generate(rest)
-    ["generate"] -> parse_generate([])
     [] -> Ok(Help)
     [cmd, ..] -> Error(UnknownCommand(cmd))
   }

@@ -11,9 +11,8 @@
 
 import cquill/query
 import cquill/query/ast.{
-  type Condition, type Direction, type Query, And, Asc, Desc, Eq, Gt, IntValue,
-  IsNotNull, IsNull, NullsDefault, Or, Query as Q, SelectAll, SelectFields,
-  StringValue, TableSource,
+  type Condition, And, Eq, Gt, IntValue, IsNotNull, IsNull, Or, SelectAll,
+  SelectFields, TableSource,
 }
 import cquill/query/builder
 import gleam/int
@@ -298,7 +297,7 @@ pub fn property_query_has_valid_select_test() {
     let select = query.get_select(q)
     let is_valid = case select {
       SelectAll -> True
-      SelectFields(fields) -> True
+      SelectFields(_fields) -> True
       // Fields can be empty list (valid)
       ast.SelectExpr(_) -> True
     }

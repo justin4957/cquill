@@ -25,7 +25,7 @@ import cquill/typed/table.{
   with_alias,
 }
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{type Option, Some}
 import gleeunit/should
 
 // ============================================================================
@@ -72,16 +72,8 @@ fn user_age() -> Column(UserTable, Int) {
 }
 
 // Post columns
-fn post_id() -> Column(PostTable, Int) {
-  column("id")
-}
-
 fn post_user_id() -> Column(PostTable, Int) {
   column("user_id")
-}
-
-fn post_title() -> Column(PostTable, String) {
-  column("title")
 }
 
 // ============================================================================

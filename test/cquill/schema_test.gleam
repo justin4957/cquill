@@ -1,10 +1,9 @@
 import cquill/schema.{
-  type Schema, type SchemaDiff, type SchemaError, CompositeForeignKey,
   DuplicateField, EmptySchema, FieldAdded, FieldRemoved, FieldTypeChanged, Index,
   InvalidConstraintColumn, InvalidPrimaryKey, InvalidTableName,
   PrimaryKeyChanged, TableCheck, UniqueConstraint,
 }
-import cquill/schema/field.{Integer, Nullable, String}
+import cquill/schema/field.{Integer}
 import gleam/dynamic
 import gleam/list
 import gleam/option.{None, Some}

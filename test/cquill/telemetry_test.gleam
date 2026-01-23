@@ -8,21 +8,14 @@
 // - Timing utilities
 
 import cquill/error
-import cquill/query/ast.{IntValue, StringValue}
+import cquill/query/ast.{IntValue}
 import cquill/telemetry.{
-  type Event, type EventType, type Handler, type Metadata, BatchStart,
-  BatchStartEvent, BatchStop, BatchStopEvent, HandlerAlreadyExists,
-  HandlerNotFound, PoolCheckin, PoolCheckinEvent, PoolCheckout,
-  PoolCheckoutEvent, PoolTimeout, PoolTimeoutEvent, QueryException,
-  QueryExceptionEvent, QueryExceptionType, QueryStart, QueryStartEvent,
-  QueryStartType, QueryStop, QueryStopEvent, QueryStopType, SavepointCreate,
-  SavepointCreateEvent, SavepointRelease, SavepointReleaseEvent,
-  SavepointRollback, SavepointRollbackEvent, SourceLocation, TransactionCommit,
-  TransactionCommitEvent, TransactionRollback, TransactionRollbackEvent,
-  TransactionStart, TransactionStartEvent,
+  type Event, type Handler, BatchStart, BatchStop, HandlerAlreadyExists,
+  HandlerNotFound, PoolTimeout, QueryException, QueryExceptionType, QueryStart,
+  QueryStartType, QueryStop, QueryStopType, TransactionCommit,
+  TransactionRollback, TransactionStart,
 }
 import gleam/dict
-import gleam/dynamic
 import gleam/erlang/process
 import gleam/list
 import gleam/option.{None, Some}
@@ -305,7 +298,7 @@ pub fn event_type_name_query_exception_test() {
 // ============================================================================
 
 pub fn now_us_returns_positive_test() {
-  let time = telemetry.now_us()
+  let _time = telemetry.now_us()
 
   // Time should be positive (or at least not crash)
   // Note: monotonic time can be negative in Erlang, but microseconds should work
