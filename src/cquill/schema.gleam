@@ -109,12 +109,27 @@ pub fn new_with_schema(source: String, table_schema: String) -> Schema {
 
 /// Add a field to the schema
 /// Fields are added in order and the order is preserved
+///
+/// If the field has a PrimaryKey constraint and no schema-level primary key
+/// is set yet, the field will automatically be registered as the primary key.
+/// This makes `field.primary_key()` work intuitively without requiring a
+/// separate call to `schema.single_primary_key()`.
 pub fn add_field(schema: Schema, new_field: Field) -> Schema {
   // Add to end to preserve insertion order
-  Schema(..schema, fields: list.append(schema.fields, [new_field]))
+  let updated_schema =
+    Schema(..schema, fields: list.append(schema.fields, [new_field]))
+
+  // Auto-register primary key if field has PrimaryKey constraint
+  // and no schema-level primary key is set yet
+  case list.is_empty(schema.primary_key) && field.is_primary_key(new_field) {
+    True -> Schema(..updated_schema, primary_key: [field.get_name(new_field)])
+    False -> updated_schema
+  }
 }
 
 /// Alias for add_field - more concise in pipelines
+///
+/// Note: This also auto-registers primary keys. See `add_field` for details.
 pub fn field(schema: Schema, new_field: Field) -> Schema {
   add_field(schema, new_field)
 }
