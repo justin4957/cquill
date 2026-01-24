@@ -105,6 +105,66 @@ pub fn single_primary_key_test() {
   schema.has_primary_key(s) |> should.be_true
 }
 
+// Tests for auto-registration of primary keys (Issue #114)
+pub fn auto_register_primary_key_from_field_constraint_test() {
+  // When a field with field.primary_key() is added, it should automatically
+  // be registered as the schema-level primary key
+  let s =
+    schema.new("users")
+    |> schema.field(field.integer("id") |> field.primary_key)
+    |> schema.field(field.string("email"))
+
+  // This should be true without calling schema.single_primary_key()!
+  schema.has_primary_key(s) |> should.be_true
+  schema.get_primary_key(s) |> should.equal(["id"])
+}
+
+pub fn auto_register_primary_key_with_add_field_test() {
+  // Same test but using add_field instead of field alias
+  let s =
+    schema.new("users")
+    |> schema.add_field(field.integer("id") |> field.primary_key)
+
+  schema.has_primary_key(s) |> should.be_true
+  schema.get_primary_key(s) |> should.equal(["id"])
+}
+
+pub fn auto_register_does_not_override_explicit_primary_key_test() {
+  // If schema.primary_key() or single_primary_key() is called first,
+  // adding a field with primary_key constraint should NOT override it
+  let s =
+    schema.new("users")
+    |> schema.single_primary_key("uuid")
+    |> schema.field(field.string("uuid"))
+    |> schema.field(field.integer("id") |> field.primary_key)
+
+  // Should keep the explicitly set primary key
+  schema.get_primary_key(s) |> should.equal(["uuid"])
+}
+
+pub fn multiple_pk_constrained_fields_keeps_first_test() {
+  // If multiple fields have primary_key constraint, only the first
+  // one gets auto-registered (subsequent ones don't override)
+  let s =
+    schema.new("users")
+    |> schema.field(field.integer("id") |> field.primary_key)
+    |> schema.field(field.string("uuid") |> field.primary_key)
+
+  // First one (id) should be the registered primary key
+  schema.get_primary_key(s) |> should.equal(["id"])
+}
+
+pub fn field_without_pk_constraint_does_not_register_test() {
+  // Fields without primary_key constraint should not affect the primary key
+  let s =
+    schema.new("users")
+    |> schema.field(field.integer("id"))
+    |> schema.field(field.string("email"))
+
+  schema.has_primary_key(s) |> should.be_false
+  schema.get_primary_key(s) |> should.equal([])
+}
+
 pub fn composite_primary_key_test() {
   let s =
     schema.new("user_roles")
