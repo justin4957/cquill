@@ -415,13 +415,14 @@ pub fn start() -> Result(Nil, actor.StartError) {
       Emit(event, metadata) -> {
         let event_type = event_to_type(event)
         // Call all handlers registered for this event type
-        dict.each(state.handlers, fn(_id, handler_info) {
-          let #(registered_events, handler) = handler_info
-          case list.contains(registered_events, event_type) {
-            True -> handler(event, metadata)
-            False -> Nil
-          }
-        })
+        let _ =
+          dict.each(state.handlers, fn(_id, handler_info) {
+            let #(registered_events, handler) = handler_info
+            case list.contains(registered_events, event_type) {
+              True -> handler(event, metadata)
+              False -> Nil
+            }
+          })
         actor.continue(state)
       }
 

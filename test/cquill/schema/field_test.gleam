@@ -2,8 +2,7 @@ import cquill/schema/field.{
   Array, BigInteger, Boolean, Cascade, Char, Check, Custom, Date, DateTime,
   Decimal, DefaultAutoIncrement, DefaultFunction, DefaultValue, Enum, Float,
   ForeignKey, Integer, Json, MaxLength, MaxValue, MinLength, MinValue, NoAction,
-  NotNull, Nullable, Pattern, PrimaryKey, Restrict, SetNull, String, Time,
-  Unique, Uuid,
+  Nullable, Pattern, Restrict, SetNull, String, Time, Uuid,
 }
 import gleam/dynamic
 import gleam/option.{None, Some}

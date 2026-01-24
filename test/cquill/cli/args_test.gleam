@@ -3,10 +3,9 @@
 // Tests for the argument parsing module that handles command line arguments.
 
 import cquill/cli/args.{
-  type Command, type GenerateOptions, type ParseError, Generate, Help,
-  InvalidValue, MissingRequired, MissingValue, UnknownCommand, UnknownOption,
-  Version, default_generate_options, format_error, parse, parse_table_list,
-  should_include_table,
+  Generate, Help, InvalidValue, MissingRequired, MissingValue, UnknownCommand,
+  UnknownOption, Version, default_generate_options, format_error, parse,
+  parse_table_list, should_include_table,
 }
 import gleam/option.{None, Some}
 import gleeunit/should

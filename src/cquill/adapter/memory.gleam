@@ -1225,7 +1225,7 @@ pub fn execute_transaction(
         }
         Error(adapter_err) -> {
           // Rollback on error
-          let rolled_back = case rollback_and_restore(tx_store) {
+          let _rolled_back = case rollback_and_restore(tx_store) {
             Ok(s) -> s
             Error(_) -> store
           }
@@ -1357,7 +1357,7 @@ pub fn execute_savepoint(
         Error(adapter_err) -> {
           // Rollback to savepoint on error
           case rollback_to_savepoint(sp_store, name) {
-            Ok(rolled_back_store) ->
+            Ok(_rolled_back_store) ->
               Error(error.SavepointAdapterError(adapter_err))
             Error(_) -> Error(error.SavepointAdapterError(adapter_err))
           }

@@ -5,8 +5,8 @@
 
 import cquill/adapter/memory.{
   create_savepoint, create_table, execute_savepoint, execute_transaction,
-  get_row, has_savepoint, in_transaction, insert_row, new_store,
-  release_savepoint, rollback_to_savepoint, savepoint_names,
+  get_row, has_savepoint, insert_row, new_store, release_savepoint,
+  rollback_to_savepoint, savepoint_names,
 }
 import cquill/error
 import gleam/dynamic

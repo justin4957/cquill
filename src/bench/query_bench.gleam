@@ -5,7 +5,6 @@
 
 import bench/bench
 import cquill/query
-import cquill/query/ast
 import cquill/schema
 import cquill/schema/field
 import gleam/io

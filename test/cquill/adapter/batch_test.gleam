@@ -4,8 +4,8 @@
 // Tests memory adapter batch operations with atomic behavior.
 
 import cquill/adapter/memory.{
-  type BatchConfig, BatchConfig, create_table, default_batch_config, delete_all,
-  delete_all_rows, get_all_rows, get_row, insert_all, insert_all_with_auto_keys,
+  BatchConfig, create_table, default_batch_config, delete_all, delete_all_rows,
+  get_all_rows, get_row, insert_all, insert_all_with_auto_keys,
   insert_all_with_config, insert_row, new_store, row_count, update_all,
   update_all_rows,
 }

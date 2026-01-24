@@ -16,7 +16,7 @@ import cquill/typed/raw.{
 }
 import cquill/typed/table.{type Column, type Table, column, table}
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleeunit/should
 
 // ============================================================================
@@ -39,20 +39,12 @@ fn orders() -> Table(OrderTable) {
 }
 
 // Mock column factories
-fn user_id() -> Column(UserTable, Int) {
-  column("id")
-}
-
 fn user_active() -> Column(UserTable, Bool) {
   column("active")
 }
 
 fn user_created_at() -> Column(UserTable, String) {
   column("created_at")
-}
-
-fn order_user_id() -> Column(OrderTable, Int) {
-  column("user_id")
 }
 
 fn order_created_at() -> Column(OrderTable, String) {

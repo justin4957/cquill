@@ -4,9 +4,8 @@
 // Tests memory adapter transactions with snapshot-based rollback.
 
 import cquill/adapter/memory.{
-  type MemoryStore, commit_and_continue, create_table, execute_transaction,
-  get_row, in_transaction, insert_row, new_store, rollback_and_restore,
-  transaction_depth,
+  create_table, execute_transaction, get_row, in_transaction, insert_row,
+  new_store, transaction_depth,
 }
 import cquill/error
 import gleam/dynamic

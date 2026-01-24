@@ -14,14 +14,14 @@ import cquill/typed/mutation.{
   insert_row, insert_row_count, insert_rows, insert_string_value,
   insert_table_name, insert_to_ast, on_conflict_constraint_do_nothing,
   on_conflict_constraint_do_update_by_name, on_conflict_do_nothing,
-  on_conflict_do_update_by_name, on_conflict_do_update_single, set_bool, set_int,
-  set_string, set_where, set_where_raw, update, update_has_where,
-  update_returning_all, update_returning_by_name, update_returning_column,
-  update_returning_columns, update_set_count, update_table_name, update_to_ast,
+  on_conflict_do_update_by_name, set_bool, set_int, set_string, set_where,
+  set_where_raw, update, update_has_where, update_returning_all,
+  update_returning_by_name, update_returning_columns, update_set_count,
+  update_table_name, update_to_ast,
 }
 import cquill/typed/table.{type Column, type Table, column, table}
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleeunit/should
 
 // ============================================================================
@@ -29,10 +29,10 @@ import gleeunit/should
 // ============================================================================
 
 /// Phantom type for the users table
-pub opaque type UserTable
+pub type UserTable
 
 /// Phantom type for the posts table
-pub opaque type PostTable
+pub type PostTable
 
 // Mock table factories
 fn users() -> Table(UserTable) {

@@ -11,14 +11,14 @@ import cquill/typed/raw.{
   concat, concat_columns_with_separator, count_all, count_column, count_distinct,
   count_over, count_over_with_alias, current_date, current_time,
   current_timestamp, date_trunc, divide, exists, extract, false_literal,
-  float_literal, in_subquery, int_literal, interval, length, lower, max, min,
-  modulo, multiply, not_exists, not_in_subquery, not_raw, now, null_literal,
-  nullif_column, or_raw, random, raw, raw_params, raw_sql, raw_to_condition,
-  raw_to_order_by, raw_with_params, row_number_over, string_literal, subtract,
-  sum, trim, true_literal, upper,
+  in_subquery, int_literal, interval, length, lower, max, min, modulo, multiply,
+  not_exists, not_in_subquery, not_raw, now, null_literal, nullif_column, or_raw,
+  random, raw, raw_params, raw_sql, raw_to_condition, raw_to_order_by,
+  raw_with_params, row_number_over, string_literal, subtract, sum, trim,
+  true_literal, upper,
 }
 import cquill/typed/table.{type Column, column}
-import gleam/option.{type Option, None, Some}
+import gleam/option.{type Option}
 import gleeunit/should
 
 // ============================================================================

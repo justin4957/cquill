@@ -8,9 +8,9 @@ import cquill/query/ast.{
   type Condition, type Direction, type JoinType, type NullsOrder, type OrderBy,
   type Query, type Select, type Value, And, Asc, Between, BoolValue, CrossJoin,
   Desc, Eq, FloatValue, FullJoin, Gt, Gte, ILike, In, InnerJoin, IntValue,
-  IsNotNull, IsNull, Join, LeftJoin, Like, Lt, Lte, Not, NotEq, NotILike, NotIn,
-  NotLike, NullValue, NullsDefault, NullsFirst, NullsLast, Or, OrderBy as OB,
-  Query as Q, RightJoin, SelectAll, SelectFields, StringValue, TableSource,
+  IsNotNull, IsNull, Join, LeftJoin, Like, Lt, Lte, Not, NotEq, NotIn, NullValue,
+  NullsDefault, NullsFirst, NullsLast, Or, OrderBy as OB, Query as Q, RightJoin,
+  SelectAll, SelectFields, StringValue, TableSource,
 }
 import gleam/int
 import gleam/list

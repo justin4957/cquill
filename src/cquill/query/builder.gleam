@@ -23,12 +23,7 @@
 // ```
 
 import cquill/query
-import cquill/query/ast.{
-  type Condition, type Direction, type Join, type JoinType, type OrderBy,
-  type Query, type Select, Asc, Desc, InnerJoin, Join as JoinClause,
-  NullsDefault, OrderBy as OrderByClause, Query as QueryRecord, Raw, SelectAll,
-  SelectFields,
-}
+import cquill/query/ast.{type Condition, type Query, Query as QueryRecord, Raw}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 

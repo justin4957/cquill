@@ -27,7 +27,7 @@
 //   |> schema.field(field.string("password_hash") |> field.not_null)
 // ```
 
-import cquill/schema/field.{type Constraint, type Field, type FieldType}
+import cquill/schema/field.{type Field, type FieldType}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string

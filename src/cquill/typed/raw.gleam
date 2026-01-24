@@ -20,7 +20,7 @@
 import cquill/query/ast
 import cquill/typed/table.{type Column, column_name}
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{type Option}
 
 // ============================================================================
 // RAW EXPRESSION TYPE
