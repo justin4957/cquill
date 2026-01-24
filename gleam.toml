@@ -1,5 +1,5 @@
 name = "cquill"
-version = "0.1.0"
+version = "0.1.1"
 target = "erlang"
 
 description = "A compile-time safe database library for Gleam - Ecto-inspired schemas, composable queries, and adapter-based persistence"
