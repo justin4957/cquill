@@ -4,6 +4,8 @@ A compile-time safe data access library for Gleam.
 
 [![Package Version](https://img.shields.io/hexpm/v/cquill)](https://hex.pm/packages/cquill)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/cquill/)
+[![CI](https://github.com/justin4957/cquill/actions/workflows/ci.yml/badge.svg)](https://github.com/justin4957/cquill/actions/workflows/ci.yml)
+[![License](https://img.shields.io/hexpm/l/cquill)](https://github.com/justin4957/cquill/blob/main/LICENSE)
 
 **"Ecto, but scaled down and typed, for Gleam"** — Schema-like types, composable queries, and adapter-based persistence without locking into any particular database.
 
@@ -70,11 +72,27 @@ pub fn main() {
 
 ## Key Features
 
-- **Schemas as data** — Define structure without coupling to persistence
-- **Composable queries** — Build complex queries from simple, reusable parts
-- **Changesets** — Validate and transform data before persistence
+### Core
+- **Schemas as data** — Define table structure with fields, types, and constraints
+- **Composable queries** — Type-safe AST-based query builder with compile-time validation
+- **Changesets** — Validate and transform data with pure functions before persistence
 - **Adapter abstraction** — Same API works with Postgres, in-memory, or custom backends
-- **Testable by design** — Use in-memory adapter for fast, isolated tests
+
+### Query Builder
+- Full SQL support: `SELECT`, `WHERE`, `JOIN`, `ORDER BY`, `GROUP BY`, `HAVING`
+- Conditions: `eq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in_list`, `between`, `is_null`
+- Joins: `INNER`, `LEFT`, `RIGHT`, `FULL`, `CROSS`
+- Subqueries and raw SQL escape hatch
+
+### Adapters
+- **Memory Adapter** — Fast, isolated testing with full transaction and savepoint support
+- **PostgreSQL Adapter** — Production-ready with connection pooling and RETURNING clause
+
+### Developer Experience
+- Code generation from database schemas (`gleam run -m cquill generate`)
+- Rich error messages with actionable hints
+- Telemetry and logging hooks for observability
+- Watch mode for development workflow
 
 ## Database Migrations
 
@@ -107,16 +125,22 @@ See [docs/MIGRATIONS.md](docs/MIGRATIONS.md) for the complete migration guide, i
 
 ## Status
 
-This library is currently in early development. See the [GitHub Issues](https://github.com/justin4957/cquill/issues) for the development roadmap.
+**Stable** — cquill v0.1.1 is production-ready with comprehensive test coverage including:
+- 1300+ unit and integration tests
+- Property-based testing for query builder
+- Concurrent access and race condition testing
+- PostgreSQL integration tests
+- Security audit validation
 
-### Roadmap
+See the [CHANGELOG](CHANGELOG.md) for release history.
 
-- **Phase 0**: Foundation & Research
-- **Phase 1**: Core Query Execution
-- **Phase 2**: Code Generation (MVP)
-- **Phase 3**: Type-Safe Query Builder
-- **Phase 4**: Transactions & Advanced Features
-- **Phase 5**: Developer Experience
+## Requirements
+
+| Dependency | Minimum Version |
+|------------|-----------------|
+| Gleam | 1.14.0+ |
+| Erlang/OTP | 26+ |
+| PostgreSQL | 14+ (for postgres adapter) |
 
 ## Development
 

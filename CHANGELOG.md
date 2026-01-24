@@ -16,6 +16,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.1.1] - 2026-01-23
+
+### Added
+
+#### Testing Infrastructure
+- Comprehensive concurrent access and race condition tests for memory adapter
+- Property-based tests for query builder using randomized inputs
+- Complete adapter contract test coverage ensuring all adapters behave consistently
+- Security audit tests and documentation for vulnerability assessment
+- Performance benchmarks for query builder, schema operations, and memory adapter
+- PostgreSQL integration tests in CI pipeline
+
+#### Developer Experience
+- Improved error messages with actionable hints and context
+- Multi-platform CLI builds (macOS, Linux) for easier installation
+- Positive assertion test helpers to improve test readability
+
+### Changed
+
+#### Code Quality
+- Replaced custom helper functions with Gleam stdlib equivalents (`list.length`, `int.to_string`)
+- Flattened nested case expressions for improved readability
+- Used `int.to_string()` instead of `string.inspect()` for integers
+
+#### Documentation
+- Fixed code examples in documentation to match actual API
+- Documented intentional result discarding patterns
+- Comprehensive API stability review for v1.0 preparation
+
+### Fixed
+- Removed all compiler warnings (138 warnings eliminated)
+
 ## [0.1.0] - 2026-01-19
 
 ### Added
@@ -88,5 +120,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated documentation generation
 - Release automation with Hex.pm publishing
 
-[Unreleased]: https://github.com/justin4957/cquill/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/justin4957/cquill/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/justin4957/cquill/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/justin4957/cquill/releases/tag/v0.1.0
