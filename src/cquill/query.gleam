@@ -261,6 +261,20 @@ pub fn not_like(field: String, pattern: String) -> Condition {
   NotLike(field:, pattern:)
 }
 
+/// Create a case-insensitive LIKE condition: field ILIKE pattern (PostgreSQL)
+/// For case-insensitive pattern matching. The pattern uses SQL wildcards:
+/// - `%` matches any sequence of characters
+/// - `_` matches any single character
+pub fn ilike(field: String, pattern: String) -> Condition {
+  ILike(field:, pattern:)
+}
+
+/// Create a case-insensitive NOT LIKE condition: field NOT ILIKE pattern (PostgreSQL)
+/// Negated case-insensitive pattern matching.
+pub fn not_ilike(field: String, pattern: String) -> Condition {
+  NotILike(field:, pattern:)
+}
+
 /// Create an IS NULL condition
 pub fn is_null(field: String) -> Condition {
   IsNull(field)

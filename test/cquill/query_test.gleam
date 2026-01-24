@@ -1,6 +1,7 @@
 import cquill/query.{
-  desc, eq_bool, eq_int, eq_string, gt_int, in_ints, in_strings, is_not_null,
-  is_null, like, lt_int, lte_int, not_eq, nulls_last,
+  desc, eq_bool, eq_int, eq_string, gt_int, ilike, in_ints, in_strings,
+  is_not_null, is_null, like, lt_int, lte_int, not_eq, not_ilike, not_like,
+  nulls_last,
 }
 import cquill/query/ast.{
   Asc, Desc, Eq, IntValue, NullsLast, Query as QueryRecord, SelectAll,
@@ -275,6 +276,30 @@ pub fn like_test() {
   let cond = like("name", "%john%")
   case cond {
     ast.Like("name", "%john%") -> should.be_true(True)
+    _ -> should.fail()
+  }
+}
+
+pub fn not_like_test() {
+  let cond = not_like("name", "%admin%")
+  case cond {
+    ast.NotLike("name", "%admin%") -> should.be_true(True)
+    _ -> should.fail()
+  }
+}
+
+pub fn ilike_test() {
+  let cond = ilike("email", "%@EXAMPLE.COM")
+  case cond {
+    ast.ILike("email", "%@EXAMPLE.COM") -> should.be_true(True)
+    _ -> should.fail()
+  }
+}
+
+pub fn not_ilike_test() {
+  let cond = not_ilike("email", "%@spam.com")
+  case cond {
+    ast.NotILike("email", "%@spam.com") -> should.be_true(True)
     _ -> should.fail()
   }
 }
