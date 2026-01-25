@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.1.1] - 2026-01-25
+
+### Added
+- `field.text()` type for large text content (descriptions, article bodies, comments) - distinguishes from `field.string()` for VARCHAR fields (#124)
+- `changeset.has_errors()` convenience function to check if a changeset has any validation errors (#125)
+- `changeset.error_count()` convenience function to get the total number of validation errors (#125)
+- `memory.create_table_with_columns()` function to create tables with column metadata for WHERE clause filtering (#126)
+- WHERE clause filtering in memory adapter now supports filtering by any column, not just the primary key (#126)
+  - Supports Int, String, Bool, and Float parameter types
+  - Supports multiple AND conditions
+
+### Changed
+- README "Executing Queries" example now uses `create_table_with_columns()` to demonstrate proper WHERE filtering (#127)
+
+### Fixed
+- Memory adapter WHERE clause filtering now correctly filters by non-ID columns when column metadata is provided (#126)
+
 ## [0.1.0] - 2026-01-19
 
 ### Added
@@ -88,5 +105,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated documentation generation
 - Release automation with Hex.pm publishing
 
-[Unreleased]: https://github.com/justin4957/cquill/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/justin4957/cquill/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/justin4957/cquill/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/justin4957/cquill/releases/tag/v0.1.0
