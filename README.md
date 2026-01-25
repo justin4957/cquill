@@ -41,30 +41,90 @@ gleam add cquill
 
 ## Quick Start
 
+### Defining Schemas
+
 ```gleam
 import cquill/schema
 import cquill/schema/field
+
+// Define your schema - this describes the table structure
+let user_schema = schema.new("users")
+  |> schema.add_field(field.integer("id") |> field.primary_key)
+  |> schema.add_field(field.string("email") |> field.not_null)
+  |> schema.add_field(field.string("name") |> field.nullable)
+  |> schema.add_field(field.boolean("active") |> field.not_null)
+  |> schema.add_field(field.integer("age") |> field.nullable)
+```
+
+### Building Queries
+
+```gleam
 import cquill/query
-import cquill/adapter/postgres
 
-pub fn main() {
-  // Define your schema
-  let user_schema = schema.new("users")
-    |> schema.add_field(field.integer("id") |> field.primary_key())
-    |> schema.add_field(field.string("email") |> field.not_null())
-    |> schema.add_field(field.string("name") |> field.nullable())
-    |> schema.add_field(field.boolean("active") |> field.not_null())
-    |> schema.add_field(field.datetime("created_at") |> field.not_null())
+// Build queries using composable pipelines
+let active_users = query.from(user_schema)
+  |> query.where(query.eq_bool("active", True))
+  |> query.order_by_desc("created_at")
+  |> query.limit(10)
 
-  // Build a query
-  let active_users = query.from(user_schema)
-    |> query.where(query.eq("active", True))
-    |> query.order_by_desc("created_at")
-    |> query.limit(10)
+// Queries are just data - inspect them for debugging
+let debug_str = query.to_debug_string(active_users)
+```
 
-  // Execute via adapter
-  use pool <- result.try(postgres.connect(config))
-  adapter.query(postgres.adapter(), pool, compiled_query)
+### Executing Queries (Memory Adapter)
+
+The memory adapter is perfect for testing and development:
+
+```gleam
+import cquill/adapter
+import cquill/adapter/memory
+import gleam/dynamic
+
+pub fn example() {
+  // Create an in-memory store with a table
+  let store = memory.new_store()
+    |> memory.create_table("users", "id")
+
+  // Insert data
+  let row = [
+    dynamic.int(1),
+    dynamic.string("alice@example.com"),
+    dynamic.string("Alice"),
+    dynamic.bool(True),
+    dynamic.int(30),
+  ]
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row)
+
+  // Query using the adapter
+  let adp = memory.memory_adapter()
+  let compiled = adapter.CompiledQuery(
+    sql: "SELECT * FROM users WHERE active = $1",
+    params: [adapter.ParamBool(True)],
+    expected_columns: 5,
+  )
+
+  case adapter.query(adp, store, compiled) {
+    Ok(rows) -> // rows is List(List(Dynamic))
+    Error(err) -> // handle error
+  }
+}
+```
+
+### Validating Data with Changesets
+
+```gleam
+import cquill/changeset
+import gleam/dict
+import gleam/dynamic
+import gleam/option.{Some}
+
+pub fn validate_user(data: Dict(String, Dynamic)) {
+  changeset.new(data)
+    |> changeset.validate_required(["email", "name"])
+    |> changeset.validate_format("email", "^[^@]+@[^@]+$")
+    |> changeset.validate_length("name", min: 2, max: 100)
+    |> changeset.validate_number_range("age", min: Some(0), max: Some(150))
+    |> changeset.apply()
 }
 ```
 
