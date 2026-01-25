@@ -35,9 +35,14 @@ pub type FieldType {
   /// SQL: DECIMAL, NUMERIC
   Decimal(precision: Int, scale: Int)
 
-  /// Variable-length string
-  /// SQL: VARCHAR, TEXT, CHARACTER VARYING
+  /// Variable-length string with optional length limit
+  /// SQL: VARCHAR, CHARACTER VARYING
   String
+
+  /// Unlimited-length text
+  /// SQL: TEXT
+  /// Use this for large text content like descriptions, bodies, comments
+  Text
 
   /// Fixed-length string
   /// SQL: CHAR, CHARACTER
@@ -205,9 +210,15 @@ pub fn decimal(name: String, precision: Int, scale: Int) -> Field {
   new(name, Decimal(precision, scale))
 }
 
-/// Create a string/text field
+/// Create a string/varchar field
 pub fn string(name: String) -> Field {
   new(name, String)
+}
+
+/// Create a text field (unlimited length)
+/// Use this for large text content like descriptions, article bodies, comments
+pub fn text(name: String) -> Field {
+  new(name, Text)
 }
 
 /// Create a boolean field
@@ -468,6 +479,7 @@ pub fn type_name(field_type: FieldType) -> String {
     Decimal(p, s) ->
       "decimal(" <> int.to_string(p) <> "," <> int.to_string(s) <> ")"
     String -> "string"
+    Text -> "text"
     Char(l) -> "char(" <> int.to_string(l) <> ")"
     Boolean -> "boolean"
     DateTime -> "datetime"
@@ -495,7 +507,7 @@ pub fn is_numeric_type(field_type: FieldType) -> Bool {
 /// Check if a field type is text-like
 pub fn is_text_type(field_type: FieldType) -> Bool {
   case field_type {
-    String | Char(_) -> True
+    String | Text | Char(_) -> True
     Nullable(inner) -> is_text_type(inner)
     _ -> False
   }
