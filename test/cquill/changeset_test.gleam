@@ -741,3 +741,123 @@ pub fn full_validation_pipeline_with_errors_test() {
 
   changeset.all_errors(cs) |> list.length |> should.equal(5)
 }
+
+// ============================================================================
+// HAS_ERRORS AND ERROR_COUNT TESTS
+// ============================================================================
+
+pub fn has_errors_returns_false_for_valid_changeset_test() {
+  let changes =
+    dict.new()
+    |> dict.insert("email", dynamic.string("test@example.com"))
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_required(["email"])
+
+  changeset.has_errors(cs) |> should.be_false
+}
+
+pub fn has_errors_returns_true_when_errors_exist_test() {
+  let changes = dict.new()
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_required(["email"])
+
+  changeset.has_errors(cs) |> should.be_true
+}
+
+pub fn has_errors_returns_true_for_multiple_errors_test() {
+  let changes =
+    dict.new()
+    |> dict.insert("email", dynamic.string("invalid"))
+    |> dict.insert("name", dynamic.string("X"))
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_format("email", "^[^@]+@[^@]+$")
+    |> changeset.validate_length("name", min: 2, max: 100)
+
+  changeset.has_errors(cs) |> should.be_true
+}
+
+pub fn error_count_returns_zero_for_valid_changeset_test() {
+  let changes =
+    dict.new()
+    |> dict.insert("email", dynamic.string("test@example.com"))
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_required(["email"])
+
+  changeset.error_count(cs) |> should.equal(0)
+}
+
+pub fn error_count_returns_one_for_single_error_test() {
+  let changes = dict.new()
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_required(["email"])
+
+  changeset.error_count(cs) |> should.equal(1)
+}
+
+pub fn error_count_returns_correct_count_for_multiple_errors_test() {
+  let changes =
+    dict.new()
+    |> dict.insert("email", dynamic.string("invalid"))
+    |> dict.insert("name", dynamic.string("X"))
+    |> dict.insert("age", dynamic.int(5))
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_format("email", "^[^@]+@[^@]+$")
+    |> changeset.validate_length("name", min: 2, max: 100)
+    |> changeset.validate_number_range("age", min: Some(18), max: None)
+
+  // 3 errors: email format, name length, age range
+  changeset.error_count(cs) |> should.equal(3)
+}
+
+pub fn error_count_counts_all_errors_on_same_field_test() {
+  // Multiple errors on the same field should all be counted
+  let changes =
+    dict.new()
+    |> dict.insert("name", dynamic.string("X"))
+
+  let cs =
+    changeset.new(changes)
+    |> changeset.validate_length("name", min: 5, max: 100)
+    |> changeset.validate_custom("name", "custom_check", fn(_cs) {
+      // Always fail for this test
+      Error("custom error")
+    })
+
+  // 2 errors on the same field (length + custom)
+  changeset.error_count(cs) |> should.equal(2)
+}
+
+pub fn has_errors_and_error_count_consistency_test() {
+  // has_errors and error_count should be consistent
+  let valid_changes =
+    dict.new()
+    |> dict.insert("email", dynamic.string("test@example.com"))
+
+  let valid_cs =
+    changeset.new(valid_changes)
+    |> changeset.validate_required(["email"])
+
+  // Valid changeset: has_errors=false, error_count=0
+  changeset.has_errors(valid_cs) |> should.be_false
+  changeset.error_count(valid_cs) |> should.equal(0)
+
+  let invalid_cs =
+    changeset.new(dict.new())
+    |> changeset.validate_required(["email", "name"])
+
+  // Invalid changeset: has_errors=true, error_count > 0
+  changeset.has_errors(invalid_cs) |> should.be_true
+  { changeset.error_count(invalid_cs) > 0 } |> should.be_true
+}
