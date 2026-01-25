@@ -491,6 +491,21 @@ pub fn has_error(changeset: Changeset, field: String) -> Bool {
   }
 }
 
+/// Check if the changeset has any validation errors
+/// This is a convenience function to check if any field has errors
+pub fn has_errors(changeset: Changeset) -> Bool {
+  !dict.is_empty(changeset.errors)
+}
+
+/// Count the total number of validation errors across all fields
+/// Returns the sum of all errors on all fields
+pub fn error_count(changeset: Changeset) -> Int {
+  changeset.errors
+  |> dict.values
+  |> list.map(list.length)
+  |> int.sum
+}
+
 // ============================================================================
 // RESULT FUNCTIONS
 // ============================================================================
