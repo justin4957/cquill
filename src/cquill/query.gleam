@@ -246,9 +246,20 @@ pub fn is_in(field: String, values: List(a)) -> Condition {
   In(field:, values: list.map(values, to_value))
 }
 
+/// Alias for is_in - check if field value is in a list of values
+/// This name may be more discoverable for users expecting `in_list`
+pub fn in_list(field: String, values: List(a)) -> Condition {
+  is_in(field, values)
+}
+
 /// Create a NOT IN condition: field NOT IN (values...)
 pub fn is_not_in(field: String, values: List(a)) -> Condition {
   NotIn(field:, values: list.map(values, to_value))
+}
+
+/// Alias for is_not_in - check if field value is NOT in a list of values
+pub fn not_in_list(field: String, values: List(a)) -> Condition {
+  is_not_in(field, values)
 }
 
 /// Create a LIKE condition: field LIKE pattern

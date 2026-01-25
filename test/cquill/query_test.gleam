@@ -1,7 +1,7 @@
 import cquill/query.{
-  desc, eq_bool, eq_int, eq_string, gt_int, ilike, in_ints, in_strings,
-  is_not_null, is_null, like, lt_int, lte_int, not_eq, not_ilike, not_like,
-  nulls_last,
+  desc, eq_bool, eq_int, eq_string, gt_int, ilike, in_ints, in_list, in_strings,
+  is_not_null, is_null, like, lt_int, lte_int, not_eq, not_ilike, not_in_list,
+  not_like, nulls_last,
 }
 import cquill/query/ast.{
   Asc, Desc, Eq, IntValue, NullsLast, Query as QueryRecord, SelectAll,
@@ -264,6 +264,32 @@ pub fn in_strings_test() {
   let cond = in_strings("status", ["pending", "approved"])
   case cond {
     ast.In("status", values) -> {
+      values
+      |> list.length
+      |> should.equal(2)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn in_list_test() {
+  // in_list is an alias for is_in - verify it produces the same AST
+  let cond = in_list("category", ["electronics", "books", "toys"])
+  case cond {
+    ast.In("category", values) -> {
+      values
+      |> list.length
+      |> should.equal(3)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn not_in_list_test() {
+  // not_in_list is an alias for is_not_in - verify it produces the same AST
+  let cond = not_in_list("status", ["deleted", "archived"])
+  case cond {
+    ast.NotIn("status", values) -> {
       values
       |> list.length
       |> should.equal(2)
