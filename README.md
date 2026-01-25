@@ -81,11 +81,14 @@ import cquill/adapter/memory
 import gleam/dynamic
 
 pub fn example() {
-  // Create an in-memory store with a table
+  // Create an in-memory store with a table and column metadata
+  // Column names enable WHERE clause filtering beyond just the primary key
   let store = memory.new_store()
-    |> memory.create_table("users", "id")
+    |> memory.create_table_with_columns("users", "id", [
+      "id", "email", "name", "active", "age",
+    ])
 
-  // Insert data
+  // Insert data (column order must match the columns list above)
   let row = [
     dynamic.int(1),
     dynamic.string("alice@example.com"),
@@ -95,7 +98,7 @@ pub fn example() {
   ]
   let assert Ok(store) = memory.insert_row(store, "users", "1", row)
 
-  // Query using the adapter
+  // Query using the adapter - WHERE clauses filter by any column
   let adp = memory.memory_adapter()
   let compiled = adapter.CompiledQuery(
     sql: "SELECT * FROM users WHERE active = $1",
@@ -104,7 +107,7 @@ pub fn example() {
   )
 
   case adapter.query(adp, store, compiled) {
-    Ok(rows) -> // rows is List(List(Dynamic))
+    Ok(rows) -> // rows is List(List(Dynamic)) - filtered by active = True
     Error(err) -> // handle error
   }
 }
