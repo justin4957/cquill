@@ -20,6 +20,7 @@ import cquill/schema.{type Schema}
 import cquill/schema/field
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -145,6 +146,36 @@ pub fn create_table(
       name: name,
       primary_key: [primary_key],
       columns: [primary_key],
+      rows: dict.new(),
+      next_id: 1,
+      unique_constraints: dict.new(),
+      not_null_columns: [],
+      foreign_keys: [],
+    )
+  let tables = dict.insert(store.tables, name, table)
+  MemoryStore(..store, tables: tables)
+}
+
+/// Create a table with explicit column names
+/// This enables WHERE clause filtering by any column, not just the primary key.
+/// Column order must match the order of values in inserted rows.
+///
+/// Example:
+/// ```gleam
+/// let store = memory.new_store()
+///   |> memory.create_table_with_columns("users", "id", ["id", "email", "active"])
+/// ```
+pub fn create_table_with_columns(
+  store: MemoryStore,
+  name: String,
+  primary_key: String,
+  columns: List(String),
+) -> MemoryStore {
+  let table =
+    MemoryTable(
+      name: name,
+      primary_key: [primary_key],
+      columns: columns,
       rows: dict.new(),
       next_id: 1,
       unique_constraints: dict.new(),
@@ -1014,26 +1045,35 @@ pub fn memory_adapter() -> Adapter(MemoryStore, MemoryRow) {
 // ADAPTER CALLBACKS
 // ============================================================================
 
-/// Execute a query - simplified implementation that just parses table name
+/// Execute a query - supports basic WHERE clause filtering
 fn execute_query(
   store: MemoryStore,
   query: CompiledQuery,
 ) -> Result(List(MemoryRow), AdapterError) {
-  // Very simplified: just extract table name from SQL
-  // Real implementation would parse the query properly
   case extract_table_name(query.sql, "FROM") {
     Error(_) ->
       Error(error.QueryFailed("Could not parse query: " <> query.sql, None))
     Ok(table_name) -> {
-      // Check for WHERE clause with primary key
-      case extract_where_id(query.sql, query.params) {
-        Some(id) ->
-          case get_row(store, table_name, id) {
-            Ok(row) -> Ok([row])
-            Error(error.NotFound) -> Ok([])
-            Error(e) -> Error(e)
+      case dict.get(store.tables, table_name) {
+        Error(_) -> Error(error.AdapterSpecific("TABLE_NOT_FOUND", table_name))
+        Ok(table) -> {
+          // Get all rows first
+          let all_rows = dict.values(table.rows)
+
+          // Check for WHERE clause and filter
+          case
+            extract_where_conditions(query.sql, query.params, table.columns)
+          {
+            [] -> Ok(all_rows)
+            conditions -> {
+              let filtered =
+                list.filter(all_rows, fn(row) {
+                  list.all(conditions, fn(cond) { matches_condition(row, cond) })
+                })
+              Ok(filtered)
+            }
           }
-        None -> get_all_rows(store, table_name)
+        }
       }
     }
   }
@@ -1458,21 +1498,190 @@ fn extract_table_name(sql: String, keyword: String) -> Result(String, Nil) {
   }
 }
 
-/// Extract ID from WHERE clause (very simplified)
-fn extract_where_id(
+/// A parsed WHERE condition for filtering
+type WhereCondition {
+  WhereCondition(
+    /// Column index in the row
+    column_index: Int,
+    /// The value to compare against
+    value: adapter.QueryParam,
+  )
+}
+
+/// Extract WHERE conditions from SQL and map to column indices
+/// Supports patterns like: WHERE column = $1 AND column2 = $2
+fn extract_where_conditions(
   sql: String,
   params: List(adapter.QueryParam),
-) -> Option(String) {
+  columns: List(String),
+) -> List(WhereCondition) {
   let sql_upper = string.uppercase(sql)
 
   case string.contains(sql_upper, "WHERE") {
-    False -> None
-    True ->
-      case string.contains(sql_upper, "ID = $1"), params {
-        True, [adapter.ParamInt(id), ..] -> Some(int.to_string(id))
-        True, [adapter.ParamString(id), ..] -> Some(id)
-        _, _ -> None
+    False -> []
+    True -> {
+      // Extract the WHERE clause part
+      case string.split(sql_upper, "WHERE") {
+        [_, where_part] -> parse_where_conditions(where_part, params, columns)
+        _ -> []
       }
+    }
+  }
+}
+
+/// Parse WHERE conditions from the WHERE clause text
+fn parse_where_conditions(
+  where_clause: String,
+  params: List(adapter.QueryParam),
+  columns: List(String),
+) -> List(WhereCondition) {
+  // Split by AND to get individual conditions
+  // Also handle the case where there's no AND (single condition)
+  let conditions_text = string.split(where_clause, " AND ")
+
+  conditions_text
+  |> list.filter_map(fn(cond_text) {
+    parse_single_condition(string.trim(cond_text), params, columns)
+  })
+}
+
+/// Parse a single condition like "COLUMN = $1"
+fn parse_single_condition(
+  condition: String,
+  params: List(adapter.QueryParam),
+  columns: List(String),
+) -> Result(WhereCondition, Nil) {
+  // Look for pattern: COLUMN = $N
+  case string.split(condition, " = ") {
+    [column_part, param_part] -> {
+      let column_name = string.trim(column_part) |> string.lowercase
+      let param_str = string.trim(param_part)
+
+      // Find column index
+      case find_column_index(column_name, columns) {
+        Error(_) -> Error(Nil)
+        Ok(col_idx) -> {
+          // Parse parameter index from $N format
+          case parse_param_index(param_str) {
+            Error(_) -> Error(Nil)
+            Ok(param_idx) -> {
+              // Get the parameter value (0-indexed)
+              case list_get(params, param_idx) {
+                Error(_) -> Error(Nil)
+                Ok(param_value) -> Ok(WhereCondition(col_idx, param_value))
+              }
+            }
+          }
+        }
+      }
+    }
+    _ -> Error(Nil)
+  }
+}
+
+/// Find the index of a column by name
+fn find_column_index(name: String, columns: List(String)) -> Result(Int, Nil) {
+  columns
+  |> list.index_map(fn(col, idx) { #(string.lowercase(col), idx) })
+  |> list.find(fn(pair) { pair.0 == name })
+  |> result.map(fn(pair) { pair.1 })
+}
+
+/// Parse parameter index from $N format (returns 0-indexed)
+fn parse_param_index(param_str: String) -> Result(Int, Nil) {
+  case string.starts_with(param_str, "$") {
+    False -> Error(Nil)
+    True -> {
+      let num_str = string.drop_start(param_str, 1)
+      // Handle cases where there might be trailing characters (like in "... $1 AND")
+      let num_str_clean =
+        num_str
+        |> string.to_graphemes
+        |> list.take_while(fn(c) { is_digit(c) })
+        |> string.concat
+
+      case int.parse(num_str_clean) {
+        Error(_) -> Error(Nil)
+        Ok(n) -> Ok(n - 1)
+        // Convert to 0-indexed
+      }
+    }
+  }
+}
+
+/// Check if a character is a digit
+fn is_digit(c: String) -> Bool {
+  case c {
+    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
+    _ -> False
+  }
+}
+
+/// Get element at index from list
+fn list_get(lst: List(a), index: Int) -> Result(a, Nil) {
+  case index < 0 {
+    True -> Error(Nil)
+    False ->
+      lst
+      |> list.drop(index)
+      |> list.first
+  }
+}
+
+/// Check if a row matches a condition
+fn matches_condition(row: MemoryRow, condition: WhereCondition) -> Bool {
+  case list_get(row, condition.column_index) {
+    Error(_) -> False
+    Ok(cell_value) -> compare_values(cell_value, condition.value)
+  }
+}
+
+/// Compare a Dynamic cell value with a QueryParam
+fn compare_values(cell: Dynamic, param: adapter.QueryParam) -> Bool {
+  case param {
+    adapter.ParamInt(expected) -> {
+      case decode.run(cell, decode.int) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
+    adapter.ParamFloat(expected) -> {
+      case decode.run(cell, decode.float) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
+    adapter.ParamString(expected) -> {
+      case decode.run(cell, decode.string) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
+    adapter.ParamBool(expected) -> {
+      case decode.run(cell, decode.bool) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
+    adapter.ParamNull -> {
+      // Check if the value is nil/null
+      case dynamic.classify(cell) {
+        "Nil" -> True
+        _ -> False
+      }
+    }
+    adapter.ParamBytes(expected) -> {
+      case decode.run(cell, decode.bit_array) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
+    adapter.ParamCustom(_, expected) -> {
+      case decode.run(cell, decode.string) {
+        Ok(actual) -> actual == expected
+        Error(_) -> False
+      }
+    }
   }
 }
 

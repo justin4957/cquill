@@ -287,3 +287,244 @@ pub fn transaction_returns_user_error_test() {
     _ -> should.fail()
   }
 }
+
+// ============================================================================
+// WHERE CLAUSE FILTERING TESTS
+// ============================================================================
+
+pub fn query_where_filter_by_boolean_test() {
+  // Create table with explicit columns for WHERE filtering
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "email", "active"])
+
+  // Insert test data
+  let row1: MemoryRow = [
+    dynamic.int(1),
+    dynamic.string("alice@example.com"),
+    dynamic.bool(True),
+  ]
+  let row2: MemoryRow = [
+    dynamic.int(2),
+    dynamic.string("bob@example.com"),
+    dynamic.bool(True),
+  ]
+  let row3: MemoryRow = [
+    dynamic.int(3),
+    dynamic.string("charlie@example.com"),
+    dynamic.bool(False),
+  ]
+
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+  let assert Ok(store) = memory.insert_row(store, "users", "2", row2)
+  let assert Ok(store) = memory.insert_row(store, "users", "3", row3)
+
+  // Query for active users
+  let adp = memory.memory_adapter()
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users WHERE active = $1",
+      params: [adapter.ParamBool(True)],
+      expected_columns: 3,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      // Should get 2 active users (alice and bob)
+      list.length(rows) |> should.equal(2)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn query_where_filter_by_string_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "email", "name"])
+
+  let row1: MemoryRow = [
+    dynamic.int(1),
+    dynamic.string("alice@example.com"),
+    dynamic.string("Alice"),
+  ]
+  let row2: MemoryRow = [
+    dynamic.int(2),
+    dynamic.string("bob@example.com"),
+    dynamic.string("Bob"),
+  ]
+
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+  let assert Ok(store) = memory.insert_row(store, "users", "2", row2)
+
+  let adp = memory.memory_adapter()
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users WHERE name = $1",
+      params: [adapter.ParamString("Alice")],
+      expected_columns: 3,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      list.length(rows) |> should.equal(1)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn query_where_filter_by_int_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "age"])
+
+  let row1: MemoryRow = [dynamic.int(1), dynamic.int(25)]
+  let row2: MemoryRow = [dynamic.int(2), dynamic.int(30)]
+  let row3: MemoryRow = [dynamic.int(3), dynamic.int(25)]
+
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+  let assert Ok(store) = memory.insert_row(store, "users", "2", row2)
+  let assert Ok(store) = memory.insert_row(store, "users", "3", row3)
+
+  let adp = memory.memory_adapter()
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users WHERE age = $1",
+      params: [adapter.ParamInt(25)],
+      expected_columns: 2,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      list.length(rows) |> should.equal(2)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn query_where_multiple_conditions_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "role", "active"])
+
+  let row1: MemoryRow = [
+    dynamic.int(1),
+    dynamic.string("admin"),
+    dynamic.bool(True),
+  ]
+  let row2: MemoryRow = [
+    dynamic.int(2),
+    dynamic.string("user"),
+    dynamic.bool(True),
+  ]
+  let row3: MemoryRow = [
+    dynamic.int(3),
+    dynamic.string("admin"),
+    dynamic.bool(False),
+  ]
+
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+  let assert Ok(store) = memory.insert_row(store, "users", "2", row2)
+  let assert Ok(store) = memory.insert_row(store, "users", "3", row3)
+
+  let adp = memory.memory_adapter()
+  // Query for active admins
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users WHERE role = $1 AND active = $2",
+      params: [adapter.ParamString("admin"), adapter.ParamBool(True)],
+      expected_columns: 3,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      // Only row1 matches both conditions
+      list.length(rows) |> should.equal(1)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn query_where_no_match_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "name"])
+
+  let row1: MemoryRow = [dynamic.int(1), dynamic.string("Alice")]
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+
+  let adp = memory.memory_adapter()
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users WHERE name = $1",
+      params: [adapter.ParamString("Nobody")],
+      expected_columns: 2,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      list.length(rows) |> should.equal(0)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn query_no_where_returns_all_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("users", "id", ["id", "name"])
+
+  let row1: MemoryRow = [dynamic.int(1), dynamic.string("Alice")]
+  let row2: MemoryRow = [dynamic.int(2), dynamic.string("Bob")]
+
+  let assert Ok(store) = memory.insert_row(store, "users", "1", row1)
+  let assert Ok(store) = memory.insert_row(store, "users", "2", row2)
+
+  let adp = memory.memory_adapter()
+  let compiled =
+    adapter.CompiledQuery(
+      sql: "SELECT * FROM users",
+      params: [],
+      expected_columns: 2,
+    )
+
+  let result = adapter.query(adp, store, compiled)
+  case result {
+    Ok(rows) -> {
+      list.length(rows) |> should.equal(2)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn create_table_with_columns_test() {
+  let store =
+    memory.new_store()
+    |> memory.create_table_with_columns("posts", "id", [
+      "id", "title", "body", "published",
+    ])
+
+  // Insert a row
+  let row: MemoryRow = [
+    dynamic.int(1),
+    dynamic.string("Hello"),
+    dynamic.string("World"),
+    dynamic.bool(True),
+  ]
+
+  let result = memory.insert_row(store, "posts", "1", row)
+  result |> should.be_ok
+
+  let store_with_row = case result {
+    Ok(s) -> s
+    Error(_) -> store
+  }
+
+  memory.get_row(store_with_row, "posts", "1")
+  |> should.be_ok
+  |> should.equal(row)
+}
