@@ -2,7 +2,7 @@ import cquill/schema/field.{
   Array, BigInteger, Boolean, Cascade, Char, Check, Custom, Date, DateTime,
   Decimal, DefaultAutoIncrement, DefaultFunction, DefaultValue, Enum, Float,
   ForeignKey, Integer, Json, MaxLength, MaxValue, MinLength, MinValue, NoAction,
-  Nullable, Pattern, Restrict, SetNull, String, Time, Uuid,
+  Nullable, Pattern, Restrict, SetNull, String, Text, Time, Uuid,
 }
 import gleam/dynamic
 import gleam/option.{None, Some}
@@ -31,6 +31,13 @@ pub fn string_field_test() {
 
   field.get_name(f) |> should.equal("email")
   field.get_type(f) |> should.equal(String)
+}
+
+pub fn text_field_test() {
+  let f = field.text("description")
+
+  field.get_name(f) |> should.equal("description")
+  field.get_type(f) |> should.equal(Text)
 }
 
 pub fn big_integer_field_test() {
@@ -295,7 +302,9 @@ pub fn comment_test() {
 pub fn type_name_test() {
   field.type_name(Integer) |> should.equal("integer")
   field.type_name(String) |> should.equal("string")
+  field.type_name(Text) |> should.equal("text")
   field.type_name(Nullable(String)) |> should.equal("string?")
+  field.type_name(Nullable(Text)) |> should.equal("text?")
   field.type_name(Array(Integer)) |> should.equal("array(integer)")
   field.type_name(Decimal(10, 2)) |> should.equal("decimal(10,2)")
   field.type_name(Enum("status", [])) |> should.equal("enum:status")
@@ -313,8 +322,10 @@ pub fn is_numeric_type_test() {
 
 pub fn is_text_type_test() {
   field.is_text_type(String) |> should.be_true
+  field.is_text_type(Text) |> should.be_true
   field.is_text_type(Char(10)) |> should.be_true
   field.is_text_type(Nullable(String)) |> should.be_true
+  field.is_text_type(Nullable(Text)) |> should.be_true
   field.is_text_type(Integer) |> should.be_false
 }
 
