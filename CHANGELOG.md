@@ -44,11 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple schemas per domain pattern
   - Schema metadata for code generation
 
-- **Query Builder** - Type-safe AST-based query construction
+- **Query Builder** - AST-based query construction
   - `SELECT`, `WHERE`, `ORDER BY`, `LIMIT`, `OFFSET`
   - Conditions: `eq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `is_null`, `is_not_null`, `between`, `in_list`
   - Logical operators: `and`, `or`, `not`
-  - Phantom-typed queries for compile-time column validation
+  - Note: Uses string-based field names; compile-time field validation planned for future release
   - Joins: INNER, LEFT, RIGHT, FULL, CROSS
   - Distinct, group by, having
   - Subqueries

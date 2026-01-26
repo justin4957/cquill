@@ -1,4 +1,4 @@
-// cquill - A compile-time safe database library for Gleam
+// cquill - A composable database library for Gleam
 //
 // This is the main entry point for the cquill CLI tool.
 // The CLI provides code generation from database schema.

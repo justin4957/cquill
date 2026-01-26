@@ -7,9 +7,11 @@ This document describes cquill's security architecture, best practices, and guid
 cquill is designed with security as a core principle. The library provides multiple layers of protection against common database security vulnerabilities:
 
 1. **Parameterized queries** - All user values are passed as parameters, never interpolated into SQL
-2. **Type-safe query building** - Queries are represented as AST structures, not strings
+2. **AST-based query building** - Queries are represented as AST structures, not strings
 3. **Identifier escaping** - Table and column names are properly escaped
 4. **Credential isolation** - Database credentials are never logged or exposed in errors
+
+> **Note**: The query builder uses string-based field names and does not provide compile-time validation that field names exist in your schema. Runtime errors will occur for invalid field names.
 
 ## SQL Injection Prevention
 
