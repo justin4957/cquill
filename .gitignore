@@ -20,3 +20,6 @@ examples/*/build/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Project-specific development notes
+CLAUDE.md

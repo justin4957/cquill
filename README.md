@@ -1,19 +1,21 @@
 # cquill
 
-A compile-time safe data access library for Gleam.
+A composable data access library for Gleam.
 
 [![Package Version](https://img.shields.io/hexpm/v/cquill)](https://hex.pm/packages/cquill)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/cquill/)
 
-**"Ecto, but scaled down and typed, for Gleam"** — Schema-like types, composable queries, and adapter-based persistence without locking into any particular database.
+**Ecto-inspired** — Schema definitions, composable queries, and adapter-based persistence without locking into any particular database.
+
+> **Note on Type Safety**: This library uses string-based field names and runtime value conversion. It does not currently provide compile-time verification that field names exist in your schema or that value types match field types. See the [Roadmap](#roadmap) for planned type safety improvements.
 
 ## Design Philosophy
 
-- **Compile-time safety over runtime convenience** — Invalid queries should fail at compile time
 - **Explicit over implicit** — No magic; transformations are visible and traceable
 - **Gleam-idiomatic** — Leverage Result types, pipelines, and the module system naturally
 - **Adapter-first** — Define persistence boundaries early; real DBs are just one adapter
 - **Small, composable modules** — Each module has one responsibility
+- **Queries as data** — Queries are inspectable AST structures, not opaque strings
 
 ## Architecture
 
@@ -62,8 +64,9 @@ let user_schema = schema.new("users")
 import cquill/query
 
 // Build queries using composable pipelines
+// Note: Field names are strings - typos won't be caught at compile time
 let active_users = query.from(user_schema)
-  |> query.where(query.eq_bool("active", True))
+  |> query.where(query.eq("active", True))
   |> query.order_by_desc("created_at")
   |> query.limit(10)
 
@@ -174,12 +177,19 @@ This library is currently in early development. See the [GitHub Issues](https://
 
 ### Roadmap
 
-- **Phase 0**: Foundation & Research
-- **Phase 1**: Core Query Execution
-- **Phase 2**: Code Generation (MVP)
-- **Phase 3**: Type-Safe Query Builder
-- **Phase 4**: Transactions & Advanced Features
-- **Phase 5**: Developer Experience
+- [x] **Phase 1**: Core Query Execution — Composable query AST, adapter abstraction
+- [x] **Phase 2**: Code Generation (MVP) — Generate Gleam types from database schemas
+- [ ] **Phase 3**: Type-Safe Query Builder — Compile-time field name validation, typed columns
+- [ ] **Phase 4**: Transactions & Advanced Features
+- [ ] **Phase 5**: Developer Experience
+
+#### Type Safety Improvements (Planned)
+
+The following improvements are planned to provide compile-time guarantees:
+
+1. **Typed column references** — Replace string field names with generated column types
+2. **Schema-validated queries** — Compile-time errors for non-existent fields
+3. **Type-checked conditions** — Ensure comparison values match field types
 
 ## Development
 

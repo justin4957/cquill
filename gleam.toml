@@ -2,7 +2,7 @@ name = "cquill"
 version = "0.1.1"
 target = "erlang"
 
-description = "A compile-time safe database library for Gleam - Ecto-inspired schemas, composable queries, and adapter-based persistence"
+description = "A composable database library for Gleam - Ecto-inspired schemas, query builder, and adapter-based persistence"
 licences = ["Apache-2.0"]
 repository = { type = "github", user = "justin4957", repo = "cquill" }
 links = [
