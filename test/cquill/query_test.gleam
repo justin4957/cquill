@@ -1,7 +1,5 @@
 import cquill/query.{
-  desc, eq_bool, eq_int, eq_string, gt_int, ilike, in_ints, in_strings,
-  is_not_null, is_null, like, lt_int, lte_int, not_eq, not_ilike, not_like,
-  nulls_last,
+  desc, ilike, is_not_null, is_null, like, not_ilike, not_like, nulls_last,
 }
 import cquill/query/ast.{
   Asc, Desc, Eq, IntValue, NullsLast, Query as QueryRecord, SelectAll,
@@ -113,7 +111,7 @@ pub fn distinct_test() {
 pub fn where_single_condition_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
 
   query.has_conditions(q) |> should.be_true
   query.condition_count(q) |> should.equal(1)
@@ -128,8 +126,8 @@ pub fn where_single_condition_test() {
 pub fn where_multiple_conditions_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_bool("active", True))
-    |> query.where(gt_int("age", 18))
+    |> query.where(query.eq("active", True))
+    |> query.where(query.gt("age", 18))
 
   query.condition_count(q) |> should.equal(2)
 }
@@ -137,7 +135,7 @@ pub fn where_multiple_conditions_test() {
 pub fn where_eq_string_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_string("email", "test@example.com"))
+    |> query.where(query.eq("email", "test@example.com"))
 
   let conditions = query.get_conditions(q)
   case conditions {
@@ -149,8 +147,8 @@ pub fn where_eq_string_test() {
 pub fn where_or_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_string("role", "admin"))
-    |> query.or_where(eq_string("role", "moderator"))
+    |> query.where(query.eq("role", "admin"))
+    |> query.or_where(query.eq("role", "moderator"))
 
   // or_where combines existing conditions with OR
   query.condition_count(q) |> should.equal(1)
@@ -165,7 +163,7 @@ pub fn where_or_test() {
 pub fn where_clear_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
     |> query.where_clear
 
   query.has_conditions(q) |> should.be_false
@@ -175,9 +173,9 @@ pub fn where_clear_test() {
 pub fn where_replace_test() {
   let q =
     query.from(user_schema())
-    |> query.where(eq_int("id", 1))
-    |> query.where(eq_bool("active", True))
-    |> query.where_replace(eq_string("email", "new@example.com"))
+    |> query.where(query.eq("id", 1))
+    |> query.where(query.eq("active", True))
+    |> query.where_replace(query.eq("email", "new@example.com"))
 
   query.condition_count(q) |> should.equal(1)
 
@@ -192,8 +190,8 @@ pub fn where_replace_test() {
 // CONDITION BUILDER TESTS
 // ============================================================================
 
-pub fn eq_int_test() {
-  let cond = eq_int("age", 25)
+pub fn eq_test() {
+  let cond = query.eq("age", 25)
   case cond {
     Eq("age", IntValue(25)) -> should.be_true(True)
     _ -> should.fail()
@@ -201,31 +199,31 @@ pub fn eq_int_test() {
 }
 
 pub fn not_eq_test() {
-  let cond = not_eq("status", "deleted")
+  let cond = query.not_eq("status", "deleted")
   case cond {
     ast.NotEq("status", _) -> should.be_true(True)
     _ -> should.fail()
   }
 }
 
-pub fn gt_int_test() {
-  let cond = gt_int("age", 18)
+pub fn gt_test() {
+  let cond = query.gt("age", 18)
   case cond {
     ast.Gt("age", IntValue(18)) -> should.be_true(True)
     _ -> should.fail()
   }
 }
 
-pub fn lt_int_test() {
-  let cond = lt_int("age", 65)
+pub fn lt_test() {
+  let cond = query.lt("age", 65)
   case cond {
     ast.Lt("age", IntValue(65)) -> should.be_true(True)
     _ -> should.fail()
   }
 }
 
-pub fn lte_int_test() {
-  let cond = lte_int("quantity", 100)
+pub fn lte_test() {
+  let cond = query.lte("quantity", 100)
   case cond {
     ast.Lte("quantity", IntValue(100)) -> should.be_true(True)
     _ -> should.fail()
@@ -248,8 +246,8 @@ pub fn is_not_null_test() {
   }
 }
 
-pub fn in_ints_test() {
-  let cond = in_ints("id", [1, 2, 3])
+pub fn is_in_test() {
+  let cond = query.is_in("id", [1, 2, 3])
   case cond {
     ast.In("id", values) -> {
       values
@@ -260,8 +258,8 @@ pub fn in_ints_test() {
   }
 }
 
-pub fn in_strings_test() {
-  let cond = in_strings("status", ["pending", "approved"])
+pub fn is_in_strings_test() {
+  let cond = query.is_in("status", ["pending", "approved"])
   case cond {
     ast.In("status", values) -> {
       values
@@ -305,7 +303,7 @@ pub fn not_ilike_test() {
 }
 
 pub fn and_conditions_test() {
-  let cond = query.and([eq_bool("active", True), gt_int("age", 18)])
+  let cond = query.and([query.eq("active", True), query.gt("age", 18)])
 
   case cond {
     ast.And(conditions) -> {
@@ -319,7 +317,7 @@ pub fn and_conditions_test() {
 
 pub fn or_conditions_test() {
   let cond =
-    query.or([eq_string("role", "admin"), eq_string("role", "moderator")])
+    query.or([query.eq("role", "admin"), query.eq("role", "moderator")])
 
   case cond {
     ast.Or(conditions) -> {
@@ -332,7 +330,7 @@ pub fn or_conditions_test() {
 }
 
 pub fn not_condition_test() {
-  let cond = query.not(eq_bool("deleted", True))
+  let cond = query.not(query.eq("deleted", True))
 
   case cond {
     ast.Not(inner) -> {
@@ -521,7 +519,7 @@ pub fn no_pagination_test() {
 pub fn inner_join_test() {
   let q =
     query.from(user_schema())
-    |> query.join("posts", on: eq_int("posts.user_id", 1))
+    |> query.join("posts", on: query.eq("posts.user_id", 1))
 
   let joins = query.get_joins(q)
   joins
@@ -540,7 +538,7 @@ pub fn inner_join_test() {
 pub fn left_join_test() {
   let q =
     query.from(user_schema())
-    |> query.left_join("posts", on: eq_int("posts.user_id", 1))
+    |> query.left_join("posts", on: query.eq("posts.user_id", 1))
 
   let joins = query.get_joins(q)
   case joins {
@@ -552,7 +550,7 @@ pub fn left_join_test() {
 pub fn join_with_alias_test() {
   let q =
     query.from(user_schema())
-    |> query.join_as("posts", alias: "p", on: eq_int("p.user_id", 1))
+    |> query.join_as("posts", alias: "p", on: query.eq("p.user_id", 1))
 
   let joins = query.get_joins(q)
   case joins {
@@ -567,8 +565,8 @@ pub fn join_with_alias_test() {
 pub fn multiple_joins_test() {
   let q =
     query.from(user_schema())
-    |> query.join("posts", on: eq_int("posts.user_id", 1))
-    |> query.left_join("comments", on: eq_int("comments.post_id", 1))
+    |> query.join("posts", on: query.eq("posts.user_id", 1))
+    |> query.left_join("comments", on: query.eq("comments.post_id", 1))
 
   let joins = query.get_joins(q)
   joins
@@ -602,7 +600,7 @@ pub fn having_test() {
   let q =
     query.from(user_schema())
     |> query.group_by("role")
-    |> query.having(gt_int("count", 5))
+    |> query.having(query.gt("count", 5))
 
   let QueryRecord(havings:, ..) = q
   havings
@@ -619,8 +617,8 @@ pub fn pipeline_composition_test() {
   let q =
     query.from(user_schema())
     |> query.select(["id", "email", "name"])
-    |> query.where(eq_bool("active", True))
-    |> query.where(gt_int("age", 18))
+    |> query.where(query.eq("active", True))
+    |> query.where(query.gt("age", 18))
     |> query.order_by_desc("created_at")
     |> query.limit(10)
 
@@ -637,8 +635,8 @@ pub fn pipeline_composition_test() {
 
 pub fn reusable_filter_composition_test() {
   // Define reusable filters as functions
-  let active = fn(q) { query.where(q, eq_bool("active", True)) }
-  let adult = fn(q) { query.where(q, gt_int("age", 18)) }
+  let active = fn(q) { query.where(q, query.eq("active", True)) }
+  let adult = fn(q) { query.where(q, query.gt("age", 18)) }
   let recent_first = fn(q) { query.order_by_desc(q, "created_at") }
 
   // Compose them
@@ -664,7 +662,7 @@ pub fn has_conditions_test() {
 
   let q2 =
     query.from(user_schema())
-    |> query.where(eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
   query.has_conditions(q2) |> should.be_true
 }
 
@@ -720,7 +718,7 @@ pub fn to_debug_string_basic_test() {
 pub fn to_debug_string_with_conditions_test() {
   let q =
     query.from_table("users")
-    |> query.where(eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
 
   let debug = query.to_debug_string(q)
 

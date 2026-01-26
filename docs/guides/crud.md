@@ -129,7 +129,7 @@ case adapter.query(postgres_adapter, pool, compiled_query) {
 ```gleam
 let user_query =
   query.from(user_schema)
-  |> query.where(query.eq_int("id", 1))
+  |> query.where(query.eq("id", 1))
 
 case adapter.query_one(postgres_adapter, pool, compiled_query) {
   Ok(row) -> {
@@ -156,20 +156,20 @@ let active_users =
 // Users by role
 let admins =
   query.from(user_schema)
-  |> query.where(query.eq_string("role", "admin"))
+  |> query.where(query.eq("role", "admin"))
 
 // Combined filters (multiple where = AND)
 let active_admins =
   query.from(user_schema)
   |> query.where(query.eq("active", True))
-  |> query.where(query.eq_string("role", "admin"))
+  |> query.where(query.eq("role", "admin"))
 
 // OR conditions
 let special_users =
   query.from(user_schema)
   |> query.where(query.or([
-    query.eq_string("role", "admin"),
-    query.eq_string("role", "moderator"),
+    query.eq("role", "admin"),
+    query.eq("role", "moderator"),
   ]))
 ```
 
@@ -362,25 +362,25 @@ import cquill/query/ast
 // Generic find by ID using table name
 pub fn find_by_id(table: String, id: Int) {
   query.from_table(table)
-  |> query.where(query.eq_int("id", id))
+  |> query.where(query.eq("id", id))
 }
 
 // Find by ID using schema (preferred for type safety)
 pub fn find_by_id_schema(schema: schema.Schema, id: Int) {
   query.from(schema)
-  |> query.where(query.eq_int("id", id))
+  |> query.where(query.eq("id", id))
 }
 
 // Build an update query by ID
 pub fn update_by_id(table: String, id: Int) {
   ast.new_update(table)
-  |> ast.update_where(query.eq_int("id", id))
+  |> ast.update_where(query.eq("id", id))
 }
 
 // Build a delete query by ID
 pub fn delete_by_id(table: String, id: Int) {
   ast.new_delete(table)
-  |> ast.delete_where(query.eq_int("id", id))
+  |> ast.delete_where(query.eq("id", id))
 }
 
 // Reusable filter for active records

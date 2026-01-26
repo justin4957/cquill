@@ -102,7 +102,7 @@ import cquill/query/ast
 pub fn query_builder_creates_correct_ast_test() {
   let q =
     query.from_table("users")
-    |> query.where(query.eq_bool("active", True))
+    |> query.where(query.eq("active", True))
     |> query.order_by_asc("name")
     |> query.limit(10)
 
@@ -120,8 +120,8 @@ pub fn query_builder_creates_correct_ast_test() {
 pub fn where_conditions_compose_correctly_test() {
   let q =
     query.from_table("users")
-    |> query.where(query.eq_int("a", 1))
-    |> query.where(query.eq_int("b", 2))
+    |> query.where(query.eq("a", 1))
+    |> query.where(query.eq("b", 2))
 
   // Both conditions are added
   q.wheres |> list.length() |> should.equal(2)
@@ -135,11 +135,11 @@ import cquill/query
 
 // Define composable query functions
 pub fn published(q: query.Query(a)) -> query.Query(a) {
-  q |> query.where(query.eq_string("status", "published"))
+  q |> query.where(query.eq("status", "published"))
 }
 
 pub fn by_author(q: query.Query(a), user_id: Int) -> query.Query(a) {
-  q |> query.where(query.eq_int("user_id", user_id))
+  q |> query.where(query.eq("user_id", user_id))
 }
 
 pub fn newest_first(q: query.Query(a)) -> query.Query(a) {
@@ -913,12 +913,12 @@ pub fn query_composition_associative_test() {
   use <- qcheck.given(qcheck.int())
   fn(id) {
     let q1 = query.from_table("users")
-      |> query.where(query.eq_int("id", id))
-      |> query.where(query.eq_bool("active", True))
+      |> query.where(query.eq("id", id))
+      |> query.where(query.eq("active", True))
 
     let q2 = query.from_table("users")
-      |> query.where(query.eq_bool("active", True))
-      |> query.where(query.eq_int("id", id))
+      |> query.where(query.eq("active", True))
+      |> query.where(query.eq("id", id))
 
     // Both should have the same number of conditions
     list.length(q1.wheres) == list.length(q2.wheres)

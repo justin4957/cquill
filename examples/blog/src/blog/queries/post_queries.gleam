@@ -14,25 +14,25 @@ pub fn base() -> Query(Nil) {
 /// Filter by post ID
 pub fn by_id(q: Query(a), id: Int) -> Query(a) {
   q
-  |> query.where(query.eq_int("id", id))
+  |> query.where(query.eq("id", id))
 }
 
 /// Filter by slug
 pub fn by_slug(q: Query(a), slug: String) -> Query(a) {
   q
-  |> query.where(query.eq_string("slug", slug))
+  |> query.where(query.eq("slug", slug))
 }
 
 /// Filter by author (user_id)
 pub fn by_author(q: Query(a), user_id: Int) -> Query(a) {
   q
-  |> query.where(query.eq_int("user_id", user_id))
+  |> query.where(query.eq("user_id", user_id))
 }
 
 /// Filter by status
 pub fn by_status(q: Query(a), status: post.PostStatus) -> Query(a) {
   q
-  |> query.where(query.eq_string("status", post.status_to_string(status)))
+  |> query.where(query.eq("status", post.status_to_string(status)))
 }
 
 /// Filter to published posts only

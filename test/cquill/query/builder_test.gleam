@@ -34,7 +34,7 @@ fn user_schema() -> schema.Schema {
 // ============================================================================
 
 pub fn filter_test() {
-  let active_filter = builder.filter(query.eq_bool("active", True))
+  let active_filter = builder.filter(query.eq("active", True))
 
   let q =
     query.from(user_schema())
@@ -49,8 +49,8 @@ pub fn filter_test() {
   }
 }
 
-pub fn filter_eq_int_test() {
-  let id_filter = builder.filter_eq_int("id", 42)
+pub fn filter_eq_test() {
+  let id_filter = builder.filter_eq("id", 42)
 
   let q =
     query.from(user_schema())
@@ -63,8 +63,8 @@ pub fn filter_eq_int_test() {
   }
 }
 
-pub fn filter_eq_string_test() {
-  let email_filter = builder.filter_eq_string("email", "test@example.com")
+pub fn filter_eq_string_value_test() {
+  let email_filter = builder.filter_eq("email", "test@example.com")
 
   let q =
     query.from(user_schema())
@@ -111,8 +111,8 @@ pub fn filter_null_test() {
 // ============================================================================
 
 pub fn compose_test() {
-  let active = builder.filter(query.eq_bool("active", True))
-  let adult = builder.filter(query.gt_int("age", 18))
+  let active = builder.filter(query.eq("active", True))
+  let adult = builder.filter(query.gt("age", 18))
   let limited = builder.with_limit(10)
 
   let composed = builder.compose([active, adult, limited])
@@ -126,7 +126,7 @@ pub fn compose_test() {
 }
 
 pub fn and_then_test() {
-  let active = builder.filter(query.eq_bool("active", True))
+  let active = builder.filter(query.eq("active", True))
   let limited = builder.with_limit(5)
 
   let combined = builder.and_then(active, limited)
@@ -279,7 +279,7 @@ pub fn with_distinct_test() {
 
 pub fn scope_test() {
   let active_scope =
-    builder.scope("active", builder.filter(query.eq_bool("active", True)))
+    builder.scope("active", builder.filter(query.eq("active", True)))
 
   let q =
     query.from(user_schema())
@@ -290,9 +290,8 @@ pub fn scope_test() {
 
 pub fn apply_scopes_test() {
   let active_scope =
-    builder.scope("active", builder.filter(query.eq_bool("active", True)))
-  let adult_scope =
-    builder.scope("adult", builder.filter(query.gt_int("age", 18)))
+    builder.scope("active", builder.filter(query.eq("active", True)))
+  let adult_scope = builder.scope("adult", builder.filter(query.gt("age", 18)))
 
   let q =
     query.from(user_schema())
@@ -390,8 +389,8 @@ pub fn by_user_test() {
 pub fn merge_conditions_test() {
   let source =
     query.from_table("other")
-    |> query.where(query.eq_int("id", 1))
-    |> query.where(query.eq_bool("active", True))
+    |> query.where(query.eq("id", 1))
+    |> query.where(query.eq("active", True))
 
   let target = query.from(user_schema())
 
@@ -442,7 +441,7 @@ pub fn merge_pagination_preserves_target_test() {
 pub fn clone_test() {
   let q =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
     |> query.limit(10)
 
   let cloned = builder.clone(q)
@@ -454,7 +453,7 @@ pub fn clone_test() {
 pub fn clone_without_conditions_test() {
   let q =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
     |> query.limit(10)
 
   let cloned = builder.clone_without_conditions(q)
@@ -478,7 +477,7 @@ pub fn clone_without_order_test() {
 pub fn clone_without_pagination_test() {
   let q =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
     |> query.limit(10)
     |> query.offset(20)
 
@@ -495,13 +494,13 @@ pub fn clone_without_pagination_test() {
 pub fn conditions_equivalent_test() {
   let q1 =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
-    |> query.where(query.eq_bool("active", True))
+    |> query.where(query.eq("id", 1))
+    |> query.where(query.eq("active", True))
 
   let q2 =
     query.from_table("other")
-    |> query.where(query.eq_bool("active", True))
-    |> query.where(query.eq_int("id", 1))
+    |> query.where(query.eq("active", True))
+    |> query.where(query.eq("id", 1))
 
   // Same conditions, different order
   builder.conditions_equivalent(q1, q2) |> should.be_true
@@ -510,11 +509,11 @@ pub fn conditions_equivalent_test() {
 pub fn conditions_not_equivalent_test() {
   let q1 =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
+    |> query.where(query.eq("id", 1))
 
   let q2 =
     query.from_table("other")
-    |> query.where(query.eq_int("id", 2))
+    |> query.where(query.eq("id", 2))
 
   builder.conditions_equivalent(q1, q2) |> should.be_false
 }
@@ -524,8 +523,8 @@ pub fn count_conditions_deep_test() {
     query.from(user_schema())
     |> query.where(
       query.and([
-        query.eq_int("id", 1),
-        query.or([query.eq_bool("a", True), query.eq_bool("b", False)]),
+        query.eq("id", 1),
+        query.or([query.eq("a", True), query.eq("b", False)]),
       ]),
     )
 
@@ -538,9 +537,9 @@ pub fn count_conditions_deep_test() {
 pub fn get_condition_fields_test() {
   let q =
     query.from(user_schema())
-    |> query.where(query.eq_int("id", 1))
-    |> query.where(query.eq_string("email", "test@example.com"))
-    |> query.where(query.gt_int("age", 18))
+    |> query.where(query.eq("id", 1))
+    |> query.where(query.eq("email", "test@example.com"))
+    |> query.where(query.gt("age", 18))
 
   let fields = builder.get_condition_fields(q)
 
@@ -553,9 +552,7 @@ pub fn get_condition_fields_test() {
 pub fn get_condition_fields_nested_test() {
   let q =
     query.from(user_schema())
-    |> query.where(
-      query.and([query.eq_int("id", 1), query.eq_string("name", "test")]),
-    )
+    |> query.where(query.and([query.eq("id", 1), query.eq("name", "test")]))
 
   let fields = builder.get_condition_fields(q)
 
@@ -573,9 +570,8 @@ pub fn real_world_composition_test() {
 
   // Define reusable scopes
   let active_users =
-    builder.scope("active", builder.filter(query.eq_bool("active", True)))
-  let adult_users =
-    builder.scope("adult", builder.filter(query.gt_int("age", 18)))
+    builder.scope("active", builder.filter(query.eq("active", True)))
+  let adult_users = builder.scope("adult", builder.filter(query.gt("age", 18)))
   let recent_first_scope = builder.scope("recent", builder.recent_first())
   let paginated = builder.scope("page_1", builder.with_pagination(1, 20))
 
@@ -606,7 +602,7 @@ pub fn conditional_composition_test() {
     query.from(user_schema())
     |> builder.when(!include_inactive, builder.active())
     |> builder.when_some(min_age, fn(age) {
-      builder.filter(query.gt_int("age", age))
+      builder.filter(query.gt("age", age))
     })
     |> builder.when(sort_by_name, builder.order_asc("name"))
 

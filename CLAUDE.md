@@ -242,6 +242,36 @@ The public API is fully documented in [docs/API_STABILITY.md](docs/API_STABILITY
 2. **Result types for I/O**: All database operations return `Result`
 3. **Option for missing values**: `get_field()`, `one()` return `Option`
 4. **Specific error types**: Errors are typed variants, not strings
+5. **Concise and focused**: Idiomatic Gleam packages have a small API with clear entry-points
+6. **Leverage type inference**: Use generic functions over type-specific variants
+
+### API Design Anti-Patterns to Avoid
+
+The following patterns lead to bloated, unfocused APIs:
+
+1. **Type-specific helper functions**: Avoid creating `eq_int()`, `eq_string()`, `eq_bool()` when a generic `eq()` works via type inference. Gleam's type system handles this automatically.
+
+2. **Generated helper functions**: Don't auto-generate convenience functions for every combination of types/operations. This creates API surface that is hard to understand and maintain.
+
+3. **Internal value constructors as public API**: Functions like `int_value()`, `string_value()` should be internal unless they provide user-facing value.
+
+4. **Dev/bench code in src/**: Keep benchmarks, development utilities, and internal tooling outside the published `src/` directory. They bloat the published package and confuse users about the public API.
+
+**Prefer this:**
+```gleam
+// One generic function using type inference
+query.eq("active", True)
+query.eq("age", 25)
+query.eq("name", "Alice")
+```
+
+**Over this (anti-pattern):**
+```gleam
+// Multiple redundant type-specific functions
+query.eq_bool("active", True)
+query.eq_int("age", 25)
+query.eq_string("name", "Alice")
+```
 
 ### Known API Considerations
 
