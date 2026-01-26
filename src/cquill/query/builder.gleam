@@ -11,9 +11,9 @@
 // Example usage:
 // ```gleam
 // // Define reusable filters
-// let active = builder.filter(query.eq_bool("active", True))
-// let recent = builder.filter(query.gt_int("created_at", cutoff))
-// let admin = builder.filter(query.eq_string("role", "admin"))
+// let active = builder.filter(query.eq("active", True))
+// let recent = builder.filter(query.gt("created_at", cutoff))
+// let admin = builder.filter(query.eq("role", "admin"))
 //
 // // Compose them
 // let active_recent_admins = builder.compose([active, recent, admin])
@@ -45,26 +45,17 @@ pub type QueryModifier(s) =
 ///
 /// ## Example
 /// ```gleam
-/// let active_filter = builder.filter(query.eq_bool("active", True))
+/// let active_filter = builder.filter(query.eq("active", True))
 /// user_query |> active_filter
 /// ```
 pub fn filter(condition: Condition) -> QueryModifier(s) {
   fn(q: Query(s)) { query.where(q, condition) }
 }
 
-/// Create a filter that requires a field to equal a specific integer.
-pub fn filter_eq_int(field: String, value: Int) -> QueryModifier(s) {
-  filter(query.eq_int(field, value))
-}
-
-/// Create a filter that requires a field to equal a specific string.
-pub fn filter_eq_string(field: String, value: String) -> QueryModifier(s) {
-  filter(query.eq_string(field, value))
-}
-
-/// Create a filter that requires a field to equal a specific boolean.
-pub fn filter_eq_bool(field: String, value: Bool) -> QueryModifier(s) {
-  filter(query.eq_bool(field, value))
+/// Create a filter that requires a field to equal a specific value.
+/// Works with any type (Int, String, Bool, etc.) via type inference.
+pub fn filter_eq(field: String, value: a) -> QueryModifier(s) {
+  filter(query.eq(field, value))
 }
 
 /// Create a filter for non-null values.
@@ -78,8 +69,9 @@ pub fn filter_null(field: String) -> QueryModifier(s) {
 }
 
 /// Create a filter for values greater than a threshold.
-pub fn filter_gt_int(field: String, value: Int) -> QueryModifier(s) {
-  filter(query.gt_int(field, value))
+/// Works with any comparable type via type inference.
+pub fn filter_gt(field: String, value: a) -> QueryModifier(s) {
+  filter(query.gt(field, value))
 }
 
 // ============================================================================
@@ -92,8 +84,8 @@ pub fn filter_gt_int(field: String, value: Int) -> QueryModifier(s) {
 /// ## Example
 /// ```gleam
 /// let active_admins = builder.compose([
-///   builder.filter(query.eq_bool("active", True)),
-///   builder.filter(query.eq_string("role", "admin")),
+///   builder.filter(query.eq("active", True)),
+///   builder.filter(query.eq("role", "admin")),
 ///   builder.with_limit(10),
 /// ])
 /// user_query |> active_admins
@@ -254,13 +246,13 @@ pub fn not_deleted() -> QueryModifier(s) {
 /// Create a "published" filter for content models.
 /// Assumes a `published` boolean field.
 pub fn published() -> QueryModifier(s) {
-  filter_eq_bool("published", True)
+  filter_eq("published", True)
 }
 
 /// Create an "active" filter.
 /// Assumes an `active` boolean field.
 pub fn active() -> QueryModifier(s) {
-  filter_eq_bool("active", True)
+  filter_eq("active", True)
 }
 
 /// Create a "recent first" ordering modifier.
@@ -278,7 +270,7 @@ pub fn oldest_first() -> QueryModifier(s) {
 /// Create a modifier for "by user" filtering.
 /// Common pattern for multi-tenant queries.
 pub fn by_user(user_id: Int) -> QueryModifier(s) {
-  filter_eq_int("user_id", user_id)
+  filter_eq("user_id", user_id)
 }
 
 // ============================================================================

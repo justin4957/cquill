@@ -107,7 +107,7 @@ pub fn example() {
     |> query.where(query.eq("active", True))
 
   let admin_query = base_query
-    |> query.where(query.eq_string("role", "admin"))
+    |> query.where(query.eq("role", "admin"))
 }
 ```
 
@@ -219,9 +219,9 @@ query.eq("field", value)
 query.not_eq("field", value)
 
 // Typed equality helpers
-query.eq_int("id", 1)
-query.eq_string("name", "Alice")
-query.eq_bool("active", True)
+query.eq("id", 1)
+query.eq("name", "Alice")
+query.eq("active", True)
 
 // Comparison
 query.gt("field", value)   // >

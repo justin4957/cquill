@@ -63,7 +63,7 @@ import cquill/query
 
 // Build queries using composable pipelines
 let active_users = query.from(user_schema)
-  |> query.where(query.eq_bool("active", True))
+  |> query.where(query.eq("active", True))
   |> query.order_by_desc("created_at")
   |> query.limit(10)
 

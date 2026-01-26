@@ -14,19 +14,19 @@ pub fn base() -> Query(Nil) {
 /// Filter by user ID
 pub fn by_id(q: Query(a), id: Int) -> Query(a) {
   q
-  |> query.where(query.eq_int("id", id))
+  |> query.where(query.eq("id", id))
 }
 
 /// Filter by email
 pub fn by_email(q: Query(a), email: String) -> Query(a) {
   q
-  |> query.where(query.eq_string("email", email))
+  |> query.where(query.eq("email", email))
 }
 
 /// Filter by role
 pub fn by_role(q: Query(a), role: user.UserRole) -> Query(a) {
   q
-  |> query.where(query.eq_string("role", user.role_to_string(role)))
+  |> query.where(query.eq("role", user.role_to_string(role)))
 }
 
 /// Filter to admins only

@@ -14,31 +14,31 @@ pub fn base() -> Query(Nil) {
 /// Filter by comment ID
 pub fn by_id(q: Query(a), id: Int) -> Query(a) {
   q
-  |> query.where(query.eq_int("id", id))
+  |> query.where(query.eq("id", id))
 }
 
 /// Filter by post ID
 pub fn by_post(q: Query(a), post_id: Int) -> Query(a) {
   q
-  |> query.where(query.eq_int("post_id", post_id))
+  |> query.where(query.eq("post_id", post_id))
 }
 
 /// Filter by author email
 pub fn by_author_email(q: Query(a), email: String) -> Query(a) {
   q
-  |> query.where(query.eq_string("author_email", email))
+  |> query.where(query.eq("author_email", email))
 }
 
 /// Filter to approved comments only
 pub fn approved(q: Query(a)) -> Query(a) {
   q
-  |> query.where(query.eq_bool("approved", True))
+  |> query.where(query.eq("approved", True))
 }
 
 /// Filter to pending (unapproved) comments only
 pub fn pending(q: Query(a)) -> Query(a) {
   q
-  |> query.where(query.eq_bool("approved", False))
+  |> query.where(query.eq("approved", False))
 }
 
 /// Order by creation date (oldest first, for chronological display)

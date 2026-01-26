@@ -18,7 +18,7 @@
 // pub fn get_active_users(conn: PostgresConnection) {
 //   let adapter = postgres.postgres_adapter()
 //   query.from(user_schema)
-//   |> query.where(query.eq_bool("active", True))
+//   |> query.where(query.eq("active", True))
 //   |> repo.all(adapter, conn, _, user_decoder)
 // }
 // ```
@@ -186,7 +186,7 @@ fn from_adapter_error_with_schema(
 /// ## Example
 /// ```gleam
 /// query.from(user_schema)
-/// |> query.where(query.eq_bool("active", True))
+/// |> query.where(query.eq("active", True))
 /// |> repo.all(adapter, conn, _, fn(row) { decode_user(row) })
 /// ```
 pub fn all(
@@ -215,7 +215,7 @@ pub fn all(
 /// ## Example
 /// ```gleam
 /// query.from(user_schema)
-/// |> query.where(query.eq_string("email", email))
+/// |> query.where(query.eq("email", email))
 /// |> repo.one(adapter, conn, _, user_decoder)
 /// ```
 pub fn one(
@@ -242,7 +242,7 @@ pub fn one(
 /// ## Example
 /// ```gleam
 /// query.from(user_schema)
-/// |> query.where(query.eq_int("id", user_id))
+/// |> query.where(query.eq("id", user_id))
 /// |> repo.get(adapter, conn, _, user_decoder)
 /// ```
 pub fn get(
@@ -307,7 +307,7 @@ pub fn get_by_id(
 /// ## Example
 /// ```gleam
 /// query.from(user_schema)
-/// |> query.where(query.eq_string("email", email))
+/// |> query.where(query.eq("email", email))
 /// |> repo.exists(adapter, conn, _)
 /// ```
 pub fn exists(
@@ -336,7 +336,7 @@ pub fn exists(
 /// ## Example
 /// ```gleam
 /// query.from(user_schema)
-/// |> query.where(query.eq_bool("active", True))
+/// |> query.where(query.eq("active", True))
 /// |> repo.count(adapter, conn, _, int_decoder)
 /// ```
 pub fn count(

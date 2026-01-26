@@ -97,14 +97,14 @@ query.from_table("users")
 
 // Using typed helpers for explicit types
 query.from_table("users")
-|> query.where(query.eq_bool("active", True))
-|> query.where(query.gt_int("age", 18))
+|> query.where(query.eq("active", True))
+|> query.where(query.gt("age", 18))
 
 // OR conditions
 query.from_table("users")
 |> query.where(query.or([
-  query.eq_string("role", "admin"),
-  query.eq_string("role", "moderator"),
+  query.eq("role", "admin"),
+  query.eq("role", "moderator"),
 ]))
 
 // Complex conditions with AND/OR
@@ -126,9 +126,9 @@ query.eq("field", value)
 query.not_eq("field", value)
 
 // Typed equality helpers
-query.eq_int("id", 1)
-query.eq_string("name", "Alice")
-query.eq_bool("active", True)
+query.eq("id", 1)
+query.eq("name", "Alice")
+query.eq("active", True)
 
 // Comparison (type-inferred)
 query.gt("field", value)   // Greater than
@@ -137,8 +137,8 @@ query.lt("field", value)   // Less than
 query.lte("field", value)  // Less than or equal
 
 // Typed comparison helpers
-query.gt_int("age", 18)
-query.lt_int("score", 100)
+query.gt("age", 18)
+query.lt("score", 100)
 
 // Pattern matching
 query.like("name", "%smith%")
@@ -153,8 +153,8 @@ query.is_in("status", ["pending", "active"])
 query.is_not_in("status", ["deleted"])
 
 // Typed IN helpers
-query.in_ints("id", [1, 2, 3])
-query.in_strings("role", ["admin", "moderator"])
+query.is_in("id", [1, 2, 3])
+query.is_in("role", ["admin", "moderator"])
 
 // BETWEEN
 query.between("age", 18, 65)
@@ -266,7 +266,7 @@ let active_users = users
   |> query.where(query.eq("active", True))
 
 let admin_users = users
-  |> query.where(query.eq_string("role", "admin"))
+  |> query.where(query.eq("role", "admin"))
 
 // Create reusable query parts
 fn paginated(q, page, per_page) {
